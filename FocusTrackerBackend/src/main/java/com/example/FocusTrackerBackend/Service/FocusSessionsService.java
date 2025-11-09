@@ -22,9 +22,13 @@ public class FocusSessionsService {
     }
 
     // Stop session and calculate duration
-    public FocusSessions stopSession(Long sessionId) {
+    public FocusSessions stopSession(Long sessionId,Long userId) {
         FocusSessions session = repo.findById(sessionId)
                 .orElseThrow(() -> new RuntimeException("Session not found"));
+
+        if(session.getUserId()!= (userId)) {
+        throw new RuntimeException("Unauthorized: cannot stop another user's session");
+        }
 
         if (session.isCompleted()) {
             throw new RuntimeException("Session already completed");
