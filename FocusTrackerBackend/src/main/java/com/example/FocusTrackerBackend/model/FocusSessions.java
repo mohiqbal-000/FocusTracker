@@ -15,6 +15,9 @@ public class FocusSessions {
     private LocalDateTime endTime;
     private long duration;
     private boolean completed;
+    @ManyToOne
+    @JoinColumn(name = "user_id",nullable = false)
+    private User user;
 
     public FocusSessions() {
     }
@@ -37,6 +40,14 @@ public class FocusSessions {
         this.startTime = startTime;
         this.duration = 0;
         this.completed = false;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
     }
 
     public void setId(long id) {

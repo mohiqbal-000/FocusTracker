@@ -1,7 +1,9 @@
 package com.example.FocusTrackerBackend.Service;
 
 import com.example.FocusTrackerBackend.Repository.FocusRepository;
+import com.example.FocusTrackerBackend.Repository.UserRepository;
 import com.example.FocusTrackerBackend.model.FocusSessions;
+import com.example.FocusTrackerBackend.model.User;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -13,10 +15,15 @@ import java.util.List;
 public class FocusSessionsService {
 
     @Autowired
+    private UserRepository userrepo;
+    @Autowired
     private FocusRepository repo;
 
     // Start new focus session
     public FocusSessions startSession(long userId) {
+        User user = userrepo.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Session not found"));
+
         FocusSessions session = new FocusSessions(userId, LocalDateTime.now());
         return repo.save(session);
     }
@@ -44,6 +51,15 @@ public class FocusSessionsService {
 
     // Get all sessions for a specific user
     public List<FocusSessions> getHistory(Long userId) {
-        return repo.findByUserId(userId);
+        return repo.findByUser_Id(userId);
+    }
+
+    public FocusSessions getSessionById(long sessionId, Long userId) {
+        FocusSessions sessions = repo.findById(sessionId)
+                .orElseThrow(() ->new RuntimeException("Sessions not found"));
+        if (sessions.getUser().getId() != userId) {
+            throw new RuntimeException("Unauthorized access");
+        }
+        return sessions;
     }
 }

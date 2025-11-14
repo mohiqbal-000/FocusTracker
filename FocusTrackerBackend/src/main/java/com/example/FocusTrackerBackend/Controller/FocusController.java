@@ -44,5 +44,13 @@ public class FocusController {
         return focusSessionsService.getHistory(userId);
     }
 
+    @GetMapping("/{id}")
+    public  FocusSessions getSessionById(@PathVariable long id,Authentication authentication){
+        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        Long userId=userDetails.getId();
+        return  focusSessionsService.getSessionById(id,userId);
+
+    }
+
 
 }

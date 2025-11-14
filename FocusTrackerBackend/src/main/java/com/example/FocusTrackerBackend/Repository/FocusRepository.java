@@ -8,5 +8,5 @@ import java.util.List;
 
 @Repository
 public interface FocusRepository extends JpaRepository<FocusSessions,Long> {
-    List<FocusSessions> findByUserId(Long userId);
+    List<FocusSessions> findByUser_Id(Long userId);
 }
