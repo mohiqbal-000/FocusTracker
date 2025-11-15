@@ -52,5 +52,8 @@ public class FocusController {
 
     }
 
+    @GetMapping("/stats/daily")
+    public object
+
 
 }

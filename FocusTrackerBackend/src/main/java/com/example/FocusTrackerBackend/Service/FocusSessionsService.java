@@ -24,7 +24,7 @@ public class FocusSessionsService {
         User user = userrepo.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Session not found"));
 
-        FocusSessions session = new FocusSessions(userId, LocalDateTime.now());
+        FocusSessions session = new FocusSessions(user, LocalDateTime.now());
         return repo.save(session);
     }
 
@@ -33,7 +33,7 @@ public class FocusSessionsService {
         FocusSessions session = repo.findById(sessionId)
                 .orElseThrow(() -> new RuntimeException("Session not found"));
 
-        if(session.getUserId()!= (userId)) {
+        if(session.getUser().getId()!= (userId)) {
         throw new RuntimeException("Unauthorized: cannot stop another user's session");
         }
 

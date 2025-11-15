@@ -10,7 +10,6 @@ public class FocusSessions {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private long id;
-    private long userId;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private long duration;
@@ -22,21 +21,15 @@ public class FocusSessions {
     public FocusSessions() {
     }
 
-    public long getUserId() {
-        return userId;
-    }
 
 
-    public void setUserId(long userId) {
-        this.userId = userId;
-    }
 
     public long getId() {
         return id;
     }
 
-    public FocusSessions( long userId, LocalDateTime startTime) {
-        this.userId = userId;
+    public FocusSessions( User user, LocalDateTime startTime) {
+        this.user = user;
         this.startTime = startTime;
         this.duration = 0;
         this.completed = false;
