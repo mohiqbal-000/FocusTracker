@@ -1,6 +1,9 @@
 package com.example.FocusTrackerBackend.Controller;
 
 
+import com.example.FocusTrackerBackend.Dto.DailyStatsDto;
+import com.example.FocusTrackerBackend.Dto.MonthlyStatsDto;
+import com.example.FocusTrackerBackend.Dto.WeeklyStatsDto;
 import com.example.FocusTrackerBackend.Security.CustomUserDetails;
 import com.example.FocusTrackerBackend.Security.JwtService;
 import com.example.FocusTrackerBackend.Service.FocusSessionsService;
@@ -51,9 +54,24 @@ public class FocusController {
         return  focusSessionsService.getSessionById(id,userId);
 
     }
-
     @GetMapping("/stats/daily")
-    public object
+    public DailyStatsDto getDaily(Authentication authentication){
+        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        Long userId= userDetails.getId();
+        return focusSessionsService.getDailyStats(userId);
+    }
+    @GetMapping("/stats/weekly")
+    public WeeklyStatsDto getWeekly(Authentication authentication){
+        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        Long userId = userDetails.getId();
+        return focusSessionsService.getWeeklyStats(userId);
+    }
+    @GetMapping("/stats/Montly")
+    public MonthlyStatsDto getMontly(Authentication authentication){
+        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        Long userId = userDetails.getId();
+        return  focusSessionsService.getMontlyStats(userId);
+    }
 
 
 }
