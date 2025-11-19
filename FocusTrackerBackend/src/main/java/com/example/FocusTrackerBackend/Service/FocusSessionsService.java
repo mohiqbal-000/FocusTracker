@@ -2,6 +2,7 @@ package com.example.FocusTrackerBackend.Service;
 
 import com.example.FocusTrackerBackend.Dto.DailyStatsDto;
 import com.example.FocusTrackerBackend.Dto.MonthlyStatsDto;
+import com.example.FocusTrackerBackend.Dto.StreakDto;
 import com.example.FocusTrackerBackend.Dto.WeeklyStatsDto;
 import com.example.FocusTrackerBackend.Repository.FocusRepository;
 import com.example.FocusTrackerBackend.Repository.UserRepository;
@@ -109,4 +110,24 @@ public class FocusSessionsService {
                 .sum();
         return new MonthlyStatsDto(totalMinutes,totalSession);
     }
-}
+
+    public StreakDto getStreak(Long userId) {
+        LocalDate today = LocalDate.now();
+        int streak = 0;
+        while (true) {
+            LocalDate dateTocheck = today.minusDays(streak);
+            boolean hasSession = repo.findByUser_Id(userId)
+                    .stream()
+                    .anyMatch(s->s.getStartTime().toLocalDate().equals(dateTocheck));
+            if(hasSession) {
+                streak++;
+            }else {
+                break;
+
+            }
+
+        }
+        return new StreakDto(streak);
+        }
+    }
+

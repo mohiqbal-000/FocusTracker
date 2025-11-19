@@ -3,6 +3,7 @@ package com.example.FocusTrackerBackend.Controller;
 
 import com.example.FocusTrackerBackend.Dto.DailyStatsDto;
 import com.example.FocusTrackerBackend.Dto.MonthlyStatsDto;
+import com.example.FocusTrackerBackend.Dto.StreakDto;
 import com.example.FocusTrackerBackend.Dto.WeeklyStatsDto;
 import com.example.FocusTrackerBackend.Security.CustomUserDetails;
 import com.example.FocusTrackerBackend.Security.JwtService;
@@ -72,6 +73,13 @@ public class FocusController {
         Long userId = userDetails.getId();
         return  focusSessionsService.getMontlyStats(userId);
     }
+    @GetMapping("/stats/streak")
+    public StreakDto getStreak(Authentication authentication){
+        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        Long userId = userDetails.getId();
+    return  focusSessionsService.getStreak(userId);
+    }
+
 
 
 }
