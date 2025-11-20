@@ -20,7 +20,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/focus")
-public class FocusController {
+public class  FocusController {
     @Autowired
     private FocusSessionsService focusSessionsService;
     @Autowired
