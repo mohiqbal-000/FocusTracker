@@ -1,5 +1,6 @@
 package com.example.FocusTrackerBackend.Controller;
 
+import com.example.FocusTrackerBackend.Dto.GoalRequestDto;
 import com.example.FocusTrackerBackend.Dto.GoalResponseDto;
 import com.example.FocusTrackerBackend.Repository.GoalRepository;
 import com.example.FocusTrackerBackend.Service.GoalService;
@@ -18,13 +19,13 @@ public class GoalContoller {
     }
 
     @PostMapping("/{userId}")
-    public GoalResponseDto createGoal(@PathVariable Long userId, @RequestBody GoalResponseDto dto){
+    public GoalResponseDto createGoal(@PathVariable Long userId, @RequestBody GoalRequestDto dto){
 
         return service.createGoal(userId,dto);
     }
     public List<GoalResponseDto> getGoals(@PathVariable Long userId){
-        return service.getGoals(userId);
-    }
+       return service.getGoals(userId);
+}
 
 
 
