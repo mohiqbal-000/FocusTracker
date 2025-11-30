@@ -23,6 +23,7 @@ public class GoalContoller {
 
         return service.createGoal(userId,dto);
     }
+    @GetMapping("/{userId}")
     public List<GoalResponseDto> getGoals(@PathVariable Long userId){
        return service.getGoals(userId);
 }

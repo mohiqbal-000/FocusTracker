@@ -68,6 +68,7 @@ public class GoalService {
     }
 
     public List<GoalResponseDto> getGoals(Long userId) {
+        updateGoalProgress(userId);
 
         return goalRepo.findByUser_id(userId).stream()
                 .map(g-> new GoalResponseDto(
