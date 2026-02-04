@@ -1,0 +1,85 @@
+package com.example.FocusTrackerBackend.Controller;
+
+
+import com.example.FocusTrackerBackend.Dto.DailyStatsDto;
+import com.example.FocusTrackerBackend.Dto.MonthlyStatsDto;
+import com.example.FocusTrackerBackend.Dto.StreakDto;
+import com.example.FocusTrackerBackend.Dto.WeeklyStatsDto;
+import com.example.FocusTrackerBackend.Security.CustomUserDetails;
+import com.example.FocusTrackerBackend.Security.JwtService;
+import com.example.FocusTrackerBackend.Service.FocusSessionsService;
+import com.example.FocusTrackerBackend.model.FocusSessions;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/focus")
+public class  FocusController {
+    @Autowired
+    private FocusSessionsService focusSessionsService;
+    @Autowired
+    private JwtService jwtService;
+    @PostMapping("/start")
+    public FocusSessions startSession(Authentication authentication){
+        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        Long userId = userDetails.getId(); // directly get userId
+
+        return focusSessionsService.startSession(userId);
+
+    }
+    @PutMapping("/stop/{sessionId}")
+    public FocusSessions stopSession(@PathVariable Long sessionId,Authentication authentication){
+
+        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        Long userId = userDetails.getId();
+
+        return focusSessionsService.stopSession(sessionId,userId);
+    }
+    @GetMapping("/history")
+    public List<FocusSessions> getHistory(Authentication authentication) {
+            CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+            Long userId = userDetails.getId();
+        return focusSessionsService.getHistory(userId);
+    }
+
+    @GetMapping("/{id}")
+    public  FocusSessions getSessionById(@PathVariable long id,Authentication authentication){
+        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        Long userId=userDetails.getId();
+        return  focusSessionsService.getSessionById(id,userId);
+
+    }
+    @GetMapping("/stats/daily")
+    public DailyStatsDto getDaily(Authentication authentication){
+        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        Long userId= userDetails.getId();
+        return focusSessionsService.getDailyStats(userId);
+    }
+    @GetMapping("/stats/weekly")
+    public WeeklyStatsDto getWeekly(Authentication authentication){
+        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        Long userId = userDetails.getId();
+        return focusSessionsService.getWeeklyStats(userId);
+    }
+    @GetMapping("/stats/Montly")
+    public MonthlyStatsDto getMontly(Authentication authentication){
+        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        Long userId = userDetails.getId();
+        return  focusSessionsService.getMontlyStats(userId);
+    }
+    @GetMapping("/stats/streak")
+    public StreakDto getStreak(Authentication authentication){
+        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        Long userId = userDetails.getId();
+    return  focusSessionsService.getStreak(userId);
+    }
+
+
+
+}

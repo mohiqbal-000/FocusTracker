@@ -1,0 +1,81 @@
+package com.example.FocusTrackerBackend.model;
+
+
+import jakarta.persistence.*;
+
+import java.time.LocalDateTime;
+@Entity
+@Table(name = "focus_sessions")
+public class FocusSessions {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private long id;
+    private LocalDateTime startTime;
+    private LocalDateTime endTime;
+    private long duration;
+    private boolean completed;
+    @ManyToOne
+    @JoinColumn(name = "user_id",nullable = false)
+    private User user;
+
+    public FocusSessions() {
+    }
+
+
+
+
+    public long getId() {
+        return id;
+    }
+
+    public FocusSessions( User user, LocalDateTime startTime) {
+        this.user = user;
+        this.startTime = startTime;
+        this.duration = 0;
+        this.completed = false;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
+    public void setId(long id) {
+        this.id = id;
+    }
+
+    public LocalDateTime getStartTime() {
+        return startTime;
+    }
+
+    public void setStartTime(LocalDateTime startTime) {
+        this.startTime = startTime;
+    }
+
+    public LocalDateTime getEndTime() {
+        return endTime;
+    }
+
+    public void setEndTime(LocalDateTime endTime) {
+        this.endTime = endTime;
+    }
+
+    public long getDuration() {
+        return duration;
+    }
+
+    public void setDuration(long duration) {
+        this.duration = duration;
+    }
+
+    public boolean isCompleted() {
+        return completed;
+    }
+
+    public void setCompleted(boolean completed) {
+        this.completed = completed;
+    }
+}
