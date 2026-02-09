@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function Login() {
   const router = useRouter();
@@ -29,7 +30,7 @@ export default function Login() {
       }
 
       localStorage.setItem("token", data.token);
-      router.push("/dashboard");
+      router.push("/Index");
 
     } catch (error: any) {
       setMessage(error.message || "Error during login ❌");
@@ -39,7 +40,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-slate-900 to-black">
       <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md w-full max-w-sm">
         <h2 className="text-2xl font-bold mb-4 text-center">FocusTracker Login</h2>
 
@@ -69,9 +70,9 @@ export default function Login() {
 
         <p className="text-sm text-center mt-4">
           Don’t have an account?{" "}
-          <a href="/signup" className="text-blue-600 hover:underline">
+          <Link href="/signup" className="text-blue-600 hover:underline">
             Sign up
-          </a>
+          </Link>
         </p>
       </form>
     </div>
