@@ -1,76 +1,113 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { goalsApi, GoalResponse } from "../lib/goalsApi";
 
+type GoalResponse = {
+  id: number;
+  goalType: string;
+  targetValue: number;
+  progressValue: number;
+  startDate: string;
+  endDate: string;
+  achieved: boolean;
+};
+
+const BACKEND_URL = "http://localhost:8080/api/Goals";
+
+// Recommended goals (UI only)
 const recommendedGoals = [
-  { title: "Study 2 hours", targetMinutes: 120 },
-  { title: "Coding Practice", targetMinutes: 90 },
-  { title: "Read Books", targetMinutes: 60 },
-  { title: "Exercise", targetMinutes: 45 },
+  { goalType: "Study", targetValue: 120 },
+  { goalType: "Coding Practice", targetValue: 90 },
+  { goalType: "Exercise", targetValue: 45 },
 ];
 
 export default function GoalsPage() {
   const [goals, setGoals] = useState<GoalResponse[]>([]);
-  const [title, setTitle] = useState("");
-  const [targetMinutes, setTargetMinutes] = useState(60);
+  const [goalType, setGoalType] = useState("");
+  const [targetValue, setTargetValue] = useState(60);
 
-  const userId = Number(localStorage.getItem("userId"));
+  const userId =
+    typeof window !== "undefined"
+      ? Number(localStorage.getItem("userId"))
+      : null;
 
+  // 🔹 Fetch goals
   useEffect(() => {
     if (!userId) return;
-    goalsApi.getByUser(userId).then(setGoals);
+
+    fetch(`${BACKEND_URL}/${userId}`)
+      .then((res) => res.json())
+      .then(setGoals)
+      .catch(console.error);
   }, [userId]);
 
-  const createGoal = async () => {
-    const newGoal = await goalsApi.create(userId, {
-      title,
-      targetMinutes,
-    });
-    setGoals([...goals, newGoal]);
-    setTitle("");
-  };
+  // 🔹 Create goal
+  const createGoal = async (goal: {
+    goalType: string;
+    targetValue: number;
+  }) => {
+    if (!userId) return;
 
-  const createFromRecommendation = async (g: any) => {
-    const newGoal = await goalsApi.create(userId, g);
-    setGoals([...goals, newGoal]);
+    const res = await fetch(`${BACKEND_URL}/${userId}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        goalType: goal.goalType,
+        targetValue: goal.targetValue,
+        startDate: new Date().toISOString().slice(0, 10),
+        endDate: new Date(
+          Date.now() + 7 * 24 * 60 * 60 * 1000
+        ).toISOString().slice(0, 10),
+      }),
+    });
+
+    const newGoal = await res.json();
+    setGoals((prev) => [...prev, newGoal]);
   };
 
   return (
     <div className="max-w-3xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">Goals</h1>
+      <h1 className="text-2xl font-bold mb-6">🎯 Goals</h1>
 
-      {/* 🎯 Create Goal */}
+      {/* Create Goal */}
       <section className="mb-8">
-        <h2 className="font-semibold mb-2">Create Your Own Goal</h2>
+        <h2 className="font-semibold mb-2">Create Goal</h2>
+
         <input
           className="border p-2 w-full mb-2"
-          placeholder="Goal title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Goal type (Study, Coding...)"
+          value={goalType}
+          onChange={(e) => setGoalType(e.target.value)}
         />
+
         <input
           type="number"
           className="border p-2 w-full mb-2"
-          value={targetMinutes}
-          onChange={(e) => setTargetMinutes(Number(e.target.value))}
+          value={targetValue}
+          onChange={(e) => setTargetValue(Number(e.target.value))}
         />
+
         <button
-          onClick={createGoal}
+          onClick={() => createGoal({ goalType, targetValue })}
           className="bg-blue-600 text-white px-4 py-2 rounded"
         >
           Add Goal
         </button>
       </section>
 
-      {/* 🌟 Recommended Goals */}
+      {/* Recommended */}
       <section className="mb-8">
-        <h2 className="font-semibold mb-2">Recommended</h2>
+        <h2 className="font-semibold mb-2">🌟 Recommended</h2>
+
         {recommendedGoals.map((g, i) => (
           <div key={i} className="flex justify-between border p-3 mb-2">
-            <span>{g.title} ({g.targetMinutes} min)</span>
+            <span>
+              {g.goalType} – {g.targetValue} min
+            </span>
             <button
-              onClick={() => createFromRecommendation(g)}
+              onClick={() => createGoal(g)}
               className="text-green-600"
             >
               Add
@@ -79,12 +116,19 @@ export default function GoalsPage() {
         ))}
       </section>
 
-      {/* 📋 My Goals */}
+      {/* My Goals */}
       <section>
-        <h2 className="font-semibold mb-2">My Goals</h2>
+        <h2 className="font-semibold mb-2">📋 My Goals</h2>
+
         {goals.map((g) => (
           <div key={g.id} className="border p-3 mb-2">
-            {g.title} — {g.targetMinutes} min
+            <div className="font-medium">{g.goalType}</div>
+            <div>
+              {g.progressValue}/{g.targetValue} min
+            </div>
+            {g.achieved && (
+              <span className="text-green-600">✔ Achieved</span>
+            )}
           </div>
         ))}
       </section>
