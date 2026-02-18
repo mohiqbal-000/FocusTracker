@@ -30,6 +30,7 @@ export default function Login() {
       }
 
       localStorage.setItem("token", data.token);
+       localStorage.setItem("userId", data.user.id.toString());
       router.push("/Index");
 
     } catch (error: any) {

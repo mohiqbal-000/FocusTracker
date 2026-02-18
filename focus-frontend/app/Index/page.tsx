@@ -18,15 +18,17 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  const token =
-    typeof window !== "undefined"
-      ? localStorage.getItem("token")
-      : null;
+const [token, setToken] = useState<string | null>(null);
 
-  /* 🔒 Protect route */
-  useEffect(() => {
-    if (!token) router.push("/login");
-  }, [token, router]);
+useEffect(() => {
+  const t = localStorage.getItem("token");
+  if (!t) {
+    router.push("/login");
+  } else {
+    setToken(t);
+  }
+}, [router]);
+
 
   /* ♻️ Restore active session on refresh */
   useEffect(() => {
@@ -170,6 +172,14 @@ export default function Dashboard() {
         {message && (
           <p className="text-sm text-center mt-4">{message}</p>
         )}
+        {/* 🔗 Go to Goals */}
+<button
+  onClick={() => router.push("/Goals")}
+  className="w-full mt-4 bg-blue-600 text-white p-3 rounded hover:bg-blue-700"
+>
+  Manage Goals 🎯
+</button>
+
       </div>
     </div>
   );

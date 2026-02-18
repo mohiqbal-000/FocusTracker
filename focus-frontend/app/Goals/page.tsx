@@ -7,8 +7,6 @@ type GoalResponse = {
   goalType: string;
   targetValue: number;
   progressValue: number;
-  startDate: string;
-  endDate: string;
   achieved: boolean;
 };
 
@@ -26,32 +24,59 @@ export default function GoalsPage() {
   const [goalType, setGoalType] = useState("");
   const [targetValue, setTargetValue] = useState(60);
 
-  const userId =
-    typeof window !== "undefined"
-      ? Number(localStorage.getItem("userId"))
-      : null;
+  const [userId, setUserId] = useState<number | null>(null);
+  const [token, setToken] = useState<string | null>(null);
 
-  // 🔹 Fetch goals
+  // ✅ Load auth data once (IMPORTANT)
   useEffect(() => {
-    if (!userId) return;
+    const id = localStorage.getItem("userId");
+    const t = localStorage.getItem("token");
 
-    fetch(`${BACKEND_URL}/${userId}`)
-      .then((res) => res.json())
+    if (id && t) {
+      setUserId(Number(id));
+      setToken(t);
+    }
+  }, []);
+  useEffect(() => {
+  console.log("userId:", userId);
+  console.log("token:", token);
+}, [userId, token]);
+
+
+  // 🔹 Fetch goals (WITH JWT)
+  useEffect(() => {
+    if (!userId || !token) return;
+
+    fetch(`${BACKEND_URL}/${userId}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error("Failed to fetch goals");
+        }
+        return res.json();
+      })
       .then(setGoals)
       .catch(console.error);
-  }, [userId]);
+  }, [userId, token]);
 
   // 🔹 Create goal
   const createGoal = async (goal: {
     goalType: string;
     targetValue: number;
   }) => {
-    if (!userId) return;
+    if (!userId || !token) {
+      alert("Not authenticated");
+      return;
+    }
 
     const res = await fetch(`${BACKEND_URL}/${userId}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
         goalType: goal.goalType,
@@ -59,12 +84,25 @@ export default function GoalsPage() {
         startDate: new Date().toISOString().slice(0, 10),
         endDate: new Date(
           Date.now() + 7 * 24 * 60 * 60 * 1000
-        ).toISOString().slice(0, 10),
+        )
+          .toISOString()
+          .slice(0, 10),
       }),
     });
 
+    if (!res.ok) {
+      const text = await res.text();
+      console.error("Create goal failed:", text);
+      alert("Failed to create goal");
+      return;
+    }
+
     const newGoal = await res.json();
     setGoals((prev) => [...prev, newGoal]);
+
+    // clear inputs
+    setGoalType("");
+    setTargetValue(60);
   };
 
   return (
@@ -119,6 +157,10 @@ export default function GoalsPage() {
       {/* My Goals */}
       <section>
         <h2 className="font-semibold mb-2">📋 My Goals</h2>
+
+        {goals.length === 0 && (
+          <p className="text-gray-500">No goals yet</p>
+        )}
 
         {goals.map((g) => (
           <div key={g.id} className="border p-3 mb-2">
