@@ -7,7 +7,7 @@ type FocusSession = {
   id: number;
   startTime: string;
   endTime: string;
-  durationMinutes: number;
+  duration: number;
 };
 
 export default function Dashboard() {
@@ -185,7 +185,7 @@ export default function Dashboard() {
           {history.map(h => (
             <div key={h.id} className="flex justify-between text-sm border-b py-1">
               <span>{new Date(h.startTime).toLocaleDateString()}</span>
-              <span>{h.durationMinutes} min</span>
+              <span>{h.duration} min</span>
             </div>
           ))}
         </div>
