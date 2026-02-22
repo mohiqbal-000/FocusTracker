@@ -26,16 +26,12 @@ export default function Dashboard() {
   const [history, setHistory] = useState<FocusSession[]>([]);
 
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
 
   /* 🔐 Load JWT */
   useEffect(() => {
     const t = localStorage.getItem("token");
-    if (!t) {
-      router.push("/login");
-    } else {
-      setToken(t);
-    }
+    if (!t) router.push("/login");
+    else setToken(t);
   }, [router]);
 
   /* ⏱ Timer */
@@ -51,26 +47,37 @@ export default function Dashboard() {
     };
   }, [startTime]);
 
-  /* 📊 Load stats + history */
-  useEffect(() => {
+  /* 🔁 Refresh stats (single source of truth) */
+  const refreshStats = async () => {
     if (!token) return;
-
     const headers = { Authorization: `Bearer ${token}` };
 
-    fetch("http://localhost:8080/api/focus/stats/daily", { headers })
-      .then(res => res.json())
-      .then(data => {
-        setDailyMinutes(data.totalMinutes);
-        setDailySessions(data.totalSessions);
-      });
+    const daily = await fetch(
+      "http://localhost:8080/api/focus/stats/daily",
+      { headers }
+    ).then(r => r.json());
 
-    fetch("http://localhost:8080/api/focus/stats/streak", { headers })
-      .then(res => res.json())
-      .then(data => setStreakDays(data.streakDays));
+    setDailyMinutes(daily.totalMinutes);
+    setDailySessions(daily.totalSessions);
 
-    fetch("http://localhost:8080/api/focus/history", { headers })
-      .then(res => res.json())
-      .then(setHistory);
+    const streak = await fetch(
+      "http://localhost:8080/api/focus/stats/streak",
+      { headers }
+    ).then(r => r.json());
+
+    setStreakDays(streak.streakDays);
+
+    const history = await fetch(
+      "http://localhost:8080/api/focus/history",
+      { headers }
+    ).then(r => r.json());
+
+    setHistory(history);
+  };
+
+  /* 📊 Load stats on page load */
+  useEffect(() => {
+    if (token) refreshStats();
   }, [token]);
 
   /* ▶️ Start session */
@@ -100,24 +107,20 @@ export default function Dashboard() {
       headers: { Authorization: `Bearer ${token}` },
     });
 
+    // ✅ Optimistic UI update
+    const minutes = Math.floor(elapsedSeconds / 60);
+    if (minutes > 0) {
+      setDailyMinutes(prev => prev + minutes);
+      setDailySessions(prev => prev + 1);
+    }
+
     setSessionId(null);
     setStartTime(null);
     setElapsedSeconds(0);
     setLoading(false);
 
-    // Refresh stats
-    const headers = { Authorization: `Bearer ${token}` };
-
-    fetch("http://localhost:8080/api/focus/stats/daily", { headers })
-      .then(res => res.json())
-      .then(data => {
-        setDailyMinutes(data.totalMinutes);
-        setDailySessions(data.totalSessions);
-      });
-
-    fetch("http://localhost:8080/api/focus/history", { headers })
-      .then(res => res.json())
-      .then(setHistory);
+    // 🔁 Sync with backend (truth)
+    refreshStats();
   };
 
   const formatTime = (s: number) =>
