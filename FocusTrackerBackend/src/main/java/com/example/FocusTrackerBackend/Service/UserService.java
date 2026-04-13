@@ -21,12 +21,11 @@ public class UserService {
 
 
     public User login(String email, String password) {
-        User existinguser = repo.findByEmail(email);
-        if(existinguser!= null && existinguser.getPassword().equals(password)){
-            return existinguser;
-        }else{
-            return null;
+        User existingUser = repo.findByEmail(email);
+        if (existingUser != null && passwordEncoder.matches(password, existingUser.getPassword())) {
+            return existingUser;
         }
+        return null;
     }
 
     public User findByEmail(String email) {

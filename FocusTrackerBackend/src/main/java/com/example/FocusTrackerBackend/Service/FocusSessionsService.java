@@ -15,19 +15,22 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class FocusSessionsService {
 
     @Autowired
-    private UserRepository userrepo;
+    private UserRepository userRepo;
     @Autowired
     private FocusRepository repo;
 
     // Start new focus session
     public FocusSessions startSession(long userId) {
-        User user = userrepo.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Session not found"));
+        User user = userRepo.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
         FocusSessions session = new FocusSessions(user, LocalDateTime.now());
         return repo.save(session);
@@ -37,9 +40,8 @@ public class FocusSessionsService {
     public FocusSessions stopSession(Long sessionId,Long userId) {
         FocusSessions session = repo.findById(sessionId)
                 .orElseThrow(() -> new RuntimeException("Session not found"));
-
-        if(session.getUser().getId()!= (userId)) {
-        throw new RuntimeException("Unauthorized: cannot stop another user's session");
+        if(!Objects.equals(session.getUser().getId(), userId)) {
+            throw new RuntimeException("Unauthorized: cannot stop another user's session");
         }
 
         if (session.isCompleted()) {
@@ -62,7 +64,7 @@ public class FocusSessionsService {
     public FocusSessions getSessionById(long sessionId, Long userId) {
         FocusSessions sessions = repo.findById(sessionId)
                 .orElseThrow(() ->new RuntimeException("Sessions not found"));
-        if (sessions.getUser().getId() != userId) {
+        if (!Objects.equals(sessions.getUser().getId(), userId)) {
             throw new RuntimeException("Unauthorized access");
         }
         return sessions;
@@ -97,7 +99,7 @@ public class FocusSessionsService {
         return new WeeklyStatsDto(totalMinutes,totalSessions);
     }
 
-    public MonthlyStatsDto getMontlyStats(Long userId) {
+    public MonthlyStatsDto getMonthlyStats(Long userId) {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime monthStart = now.withDayOfMonth(1);
         List<FocusSessions> sessions  = repo.findByUser_Id(userId)
@@ -113,21 +115,17 @@ public class FocusSessionsService {
 
     public StreakDto getStreak(Long userId) {
         LocalDate today = LocalDate.now();
+
+        Set<LocalDate> sessionDates = repo.findByUser_Id(userId)
+                .stream()
+                .map(s -> s.getStartTime().toLocalDate())
+                .collect(Collectors.toSet());
+
         int streak = 0;
-        while (true) {
-            LocalDate dateTocheck = today.minusDays(streak);
-            boolean hasSession = repo.findByUser_Id(userId)
-                    .stream()
-                    .anyMatch(s->s.getStartTime().toLocalDate().equals(dateTocheck));
-            if(hasSession) {
-                streak++;
-            }else {
-                break;
-
-            }
-
+        while (sessionDates.contains(today.minusDays(streak))) {
+            streak++;
         }
         return new StreakDto(streak);
-        }
+    }
     }
 
