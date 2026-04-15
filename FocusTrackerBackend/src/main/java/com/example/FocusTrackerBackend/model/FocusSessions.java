@@ -22,6 +22,7 @@ public class FocusSessions {
     private Integer customWorkMinutes;    // only used when mode = CUSTOM
     private Integer customBreakMinutes;
 
+    @Column(length = 500)
     private String note;                  // optional post-session note
 
     private boolean breakStarted = false;
@@ -30,6 +31,7 @@ public class FocusSessions {
     @ManyToOne
     @JoinColumn(name = "tag_id", nullable = true)
     private Tag tag;
+
 
 
 

@@ -32,9 +32,7 @@ public class FocusSessionsService {
     @Autowired
     private TagRepository tagRepo;
 
-    // Start new focus session
-    @Autowired
-    private TagRepository tagRepo;
+
 
     // Updated startSession — tagName is optional, pass null to start untagged
     public FocusSessions startSession(Long userId, String tagName) {
@@ -145,6 +143,36 @@ public class FocusSessionsService {
             streak++;
         }
         return new StreakDto(streak);
+    }
+
+    public FocusSessions addNote(Long sessionId, Long userId, String note) {
+        FocusSessions session = repo.findById(sessionId)
+                .orElseThrow(() -> new RuntimeException("Session not found"));
+
+        if (!Objects.equals(session.getUser().getId(), userId)) {
+            throw new RuntimeException("Unauthorized access");
+        }
+        if (!session.isCompleted()) {
+            throw new RuntimeException("Cannot add a note to an in-progress session");
+        }
+        if (note == null || note.isBlank()) {
+            throw new RuntimeException("Note cannot be empty");
+        }
+
+        session.setNote(note.trim());
+        return repo.save(session);
+    }
+
+    public FocusSessions deleteNote(Long sessionId, Long userId) {
+        FocusSessions session = repo.findById(sessionId)
+                .orElseThrow(() -> new RuntimeException("Session not found"));
+
+        if (!Objects.equals(session.getUser().getId(), userId)) {
+            throw new RuntimeException("Unauthorized access");
+        }
+
+        session.setNote(null);
+        return repo.save(session);
     }
     }
 

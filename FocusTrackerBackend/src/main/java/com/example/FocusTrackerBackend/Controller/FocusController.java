@@ -1,16 +1,14 @@
     package com.example.FocusTrackerBackend.Controller;
     
     
-    import com.example.FocusTrackerBackend.Dto.DailyStatsDto;
-    import com.example.FocusTrackerBackend.Dto.MonthlyStatsDto;
-    import com.example.FocusTrackerBackend.Dto.StreakDto;
-    import com.example.FocusTrackerBackend.Dto.WeeklyStatsDto;
+    import com.example.FocusTrackerBackend.Dto.*;
     import com.example.FocusTrackerBackend.Security.CustomUserDetails;
     import com.example.FocusTrackerBackend.Security.JwtService;
     import com.example.FocusTrackerBackend.Service.FocusSessionsService;
     import com.example.FocusTrackerBackend.model.FocusSessions;
     import jakarta.servlet.http.HttpServletRequest;
     import jakarta.servlet.http.HttpServletResponse;
+    import jakarta.validation.Valid;
     import org.springframework.beans.factory.annotation.Autowired;
     import org.springframework.security.core.Authentication;
     import org.springframework.security.core.userdetails.UserDetails;
@@ -83,7 +81,27 @@
             Long userId = userDetails.getId();
         return  focusSessionsService.getStreak(userId);
         }
-    
+
+        @PutMapping("/{sessionId}/note")
+        public FocusSessions addNote(
+                @PathVariable Long sessionId,
+                @RequestBody @Valid NoteRequestDto request,
+                Authentication authentication) {
+
+            CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+            Long userId = userDetails.getId();
+            return focusSessionsService.addNote(sessionId, userId, request.getNote());
+        }
+
+        @DeleteMapping("/{sessionId}/note")
+        public FocusSessions deleteNote(
+                @PathVariable Long sessionId,
+                Authentication authentication) {
+
+            CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+            Long userId = userDetails.getId();
+            return focusSessionsService.deleteNote(sessionId, userId);
+        }
     
     
     }
