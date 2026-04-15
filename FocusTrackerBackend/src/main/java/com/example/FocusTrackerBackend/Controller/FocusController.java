@@ -27,12 +27,11 @@
         @Autowired
         private JwtService jwtService;
         @PostMapping("/start")
-        public FocusSessions startSession(Authentication authentication){
+        public FocusSessions startSession(
+                @RequestParam(required = false) String tag,
+                Authentication authentication) {
             CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
-            Long userId = userDetails.getId(); // directly get userId
-    
-            return focusSessionsService.startSession(userId);
-    
+            return focusSessionsService.startSession(userDetails.getId(), tag);
         }
         @PutMapping("/stop/{sessionId}")
         public FocusSessions stopSession(@PathVariable Long sessionId,Authentication authentication){
@@ -42,13 +41,17 @@
     
             return focusSessionsService.stopSession(sessionId,userId);
         }
+
+        // Updated /history
         @GetMapping("/history")
-        public List<FocusSessions> getHistory(Authentication authentication) {
-                CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
-                Long userId = userDetails.getId();
-            return focusSessionsService.getHistory(userId);
+        public List<FocusSessions> getHistory(
+                @RequestParam(required = false) String tag,
+                Authentication authentication) {
+            CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+            return focusSessionsService.getHistory(userDetails.getId(), tag);
         }
-    
+
+
         @GetMapping("/{id}")
         public  FocusSessions getSessionById(@PathVariable long id,Authentication authentication){
             CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
@@ -72,7 +75,7 @@
         public MonthlyStatsDto getMontly(Authentication authentication){
             CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
             Long userId = userDetails.getId();
-            return  focusSessionsService.getMontlyStats(userId);
+            return  focusSessionsService.getMonthlyStats(userId);
         }
         @GetMapping("/stats/streak")
         public StreakDto getStreak(Authentication authentication){

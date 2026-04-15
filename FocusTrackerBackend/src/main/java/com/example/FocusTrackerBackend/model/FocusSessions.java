@@ -27,10 +27,19 @@ public class FocusSessions {
     private boolean breakStarted = false;
     private LocalDateTime breakStartTime;
     private LocalDateTime breakEndTime;
+    @ManyToOne
+    @JoinColumn(name = "tag_id", nullable = true)
+    private Tag tag;
+
+
 
 
     public FocusSessions() {
     }
+
+    // getter and setter
+    public Tag getTag() { return tag; }
+    public void setTag(Tag tag) { this.tag = tag; }
 
     public PomodoroMode getMode() {
         return mode;
@@ -135,9 +144,9 @@ public class FocusSessions {
         return duration;
     }
 
-    public void setDuration(long duration) {
-        this.duration = duration;
-    }
+        public void setDuration(long duration) {
+            this.duration = duration;
+        }
 
     public boolean isCompleted() {
         return completed;

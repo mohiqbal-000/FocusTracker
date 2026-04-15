@@ -5,8 +5,10 @@ import com.example.FocusTrackerBackend.Dto.MonthlyStatsDto;
 import com.example.FocusTrackerBackend.Dto.StreakDto;
 import com.example.FocusTrackerBackend.Dto.WeeklyStatsDto;
 import com.example.FocusTrackerBackend.Repository.FocusRepository;
+import com.example.FocusTrackerBackend.Repository.TagRepository;
 import com.example.FocusTrackerBackend.Repository.UserRepository;
 import com.example.FocusTrackerBackend.model.FocusSessions;
+import com.example.FocusTrackerBackend.model.Tag;
 import com.example.FocusTrackerBackend.model.User;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -27,12 +29,27 @@ public class FocusSessionsService {
     @Autowired
     private FocusRepository repo;
 
+    @Autowired
+    private TagRepository tagRepo;
+
     // Start new focus session
-    public FocusSessions startSession(long userId) {
+    @Autowired
+    private TagRepository tagRepo;
+
+    // Updated startSession — tagName is optional, pass null to start untagged
+    public FocusSessions startSession(Long userId, String tagName) {
         User user = userRepo.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         FocusSessions session = new FocusSessions(user, LocalDateTime.now());
+
+        if (tagName != null && !tagName.isBlank()) {
+            Tag tag = tagRepo.findByNameIgnoreCase(tagName.trim())
+                    .orElseThrow(() -> new RuntimeException(
+                            "Tag '" + tagName + "' not found. Create it first via POST /api/tags"));
+            session.setTag(tag);
+        }
+
         return repo.save(session);
     }
 
@@ -57,10 +74,12 @@ public class FocusSessionsService {
     }
 
     // Get all sessions for a specific user
-    public List<FocusSessions> getHistory(Long userId) {
+    public List<FocusSessions> getHistory(Long userId, String tagName) {
+        if (tagName != null && !tagName.isBlank()) {
+            return repo.findByUser_IdAndTag_NameIgnoreCase(userId, tagName.trim());
+        }
         return repo.findByUser_Id(userId);
     }
-
     public FocusSessions getSessionById(long sessionId, Long userId) {
         FocusSessions sessions = repo.findById(sessionId)
                 .orElseThrow(() ->new RuntimeException("Sessions not found"));
