@@ -32,6 +32,9 @@ public class FocusSessionsService {
     @Autowired
     private TagRepository tagRepo;
 
+    @Autowired
+    private DailyGoalService dailyGoalService;
+
 
 
     // Updated startSession — tagName is optional, pass null to start untagged
@@ -173,6 +176,36 @@ public class FocusSessionsService {
 
         session.setNote(null);
         return repo.save(session);
+    }
+    public DailyStatsDto getDailyStats(Long userId) {
+
+        // Collect today's completed sessions
+        List<FocusSessions> sessions = repo.findByUser_Id(userId)
+                .stream()
+                .filter(s -> s.isCompleted() &&
+                        s.getStartTime().toLocalDate().equals(LocalDate.now()))
+                .toList();
+
+        int totalSessions = sessions.size();
+        long totalMinutes = sessions.stream()
+                .mapToLong(FocusSessions::getDuration)
+                .sum();
+
+        // Check if user has a daily goal
+        return dailyGoalService.findGoal(userId)
+                .map(goal -> {
+                    int target = goal.getTargetMinutes();
+                    int progress = (int) Math.min(100, (totalMinutes * 100) / target);
+                    long remaining = Math.max(0, target - totalMinutes);
+                    boolean achieved = totalMinutes >= target;
+
+                    return new DailyStatsDto(
+                            totalMinutes, totalSessions,
+                            target, progress, remaining, achieved
+                    );
+                })
+                // No goal set — return basic stats without goal fields
+                .orElse(new DailyStatsDto(totalMinutes, totalSessions));
     }
     }
 
