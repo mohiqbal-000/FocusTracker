@@ -90,20 +90,7 @@ public class FocusSessionsService {
         return sessions;
     }
 
-    public DailyStatsDto getDailyStats(Long userId) {
 
-        List<FocusSessions> sessions = repo.findByUser_Id(userId)
-                .stream()
-                .filter(s -> s.getStartTime().toLocalDate().equals(LocalDate.now()))
-                .toList();
-        int totalSessions = sessions.size();
-        long totalMinutes = sessions.stream()
-                .mapToLong(FocusSessions::getDuration)
-                .sum();
-
-        return new DailyStatsDto(totalMinutes,totalSessions);
-
-    }
 
     public WeeklyStatsDto getWeeklyStats(Long userId) {
     LocalDateTime now = LocalDateTime.now();
@@ -145,7 +132,7 @@ public class FocusSessionsService {
         while (sessionDates.contains(today.minusDays(streak))) {
             streak++;
         }
-        return new StreakDto(streak);
+        return new StreakDto();
     }
 
     public FocusSessions addNote(Long sessionId, Long userId, String note) {
