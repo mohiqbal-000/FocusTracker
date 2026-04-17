@@ -1,9 +1,6 @@
 package com.example.FocusTrackerBackend.Service;
 
-import com.example.FocusTrackerBackend.Dto.DailyStatsDto;
-import com.example.FocusTrackerBackend.Dto.MonthlyStatsDto;
-import com.example.FocusTrackerBackend.Dto.StreakDto;
-import com.example.FocusTrackerBackend.Dto.WeeklyStatsDto;
+import com.example.FocusTrackerBackend.Dto.*;
 import com.example.FocusTrackerBackend.Repository.FocusRepository;
 import com.example.FocusTrackerBackend.Repository.TagRepository;
 import com.example.FocusTrackerBackend.Repository.UserRepository;
@@ -16,9 +13,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -42,7 +37,7 @@ public class FocusSessionsService {
         User user = userRepo.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        FocusSessions session = new FocusSessions(user, LocalDateTime.now());
+        FocusSessions session = new FocusSessions(user);
 
         if (tagName != null && !tagName.isBlank()) {
             Tag tag = tagRepo.findByNameIgnoreCase(tagName.trim())
@@ -193,6 +188,133 @@ public class FocusSessionsService {
                 })
                 // No goal set — return basic stats without goal fields
                 .orElse(new DailyStatsDto(totalMinutes, totalSessions));
+    }
+    public BestHoursDto getBestHours(Long userId) {
+
+        // Only analyse completed sessions — in-progress sessions have no duration
+        List<FocusSessions> completed = repo.findByUser_Id(userId)
+                .stream()
+                .filter(FocusSessions::isCompleted)
+                .toList();
+
+        if (completed.isEmpty()) {
+            return emptyBestHours();
+        }
+
+        // Group sessions by the hour their startTime falls in (0–23)
+        Map<Integer, List<FocusSessions>> byHour = completed.stream()
+                .collect(Collectors.groupingBy(s -> s.getStartTime().getHour()));
+
+        // Find the maximum totalMinutes across all slots — used to scale intensityLevel
+        long maxMinutes = byHour.values().stream()
+                .mapToLong(sessions -> sessions.stream()
+                        .mapToLong(FocusSessions::getDuration).sum())
+                .max()
+                .orElse(1);   // avoid division by zero
+
+        // Build all 24 hourly buckets, filling empty hours with zeros
+        List<HourlyBucketDto> allHours = new ArrayList<>();
+        for (int h = 0; h < 24; h++) {
+            List<FocusSessions> sessions = byHour.getOrDefault(h, List.of());
+            long totalMinutes = sessions.stream()
+                    .mapToLong(FocusSessions::getDuration).sum();
+            int count = sessions.size();
+            double avg = count > 0
+                    ? Math.round((totalMinutes * 10.0) / count) / 10.0
+                    : 0.0;
+            int intensity = calculateIntensity(totalMinutes, maxMinutes);
+
+            allHours.add(new HourlyBucketDto(h, formatHour(h), totalMinutes, count, avg, intensity));
+        }
+
+        // Top 3 hours by total focus minutes
+        List<HourlyBucketDto> topHours = allHours.stream()
+                .filter(b -> b.getTotalMinutes() > 0)
+                .sorted(Comparator.comparingLong(HourlyBucketDto::getTotalMinutes).reversed())
+                .limit(3)
+                .toList();
+
+        String peakPeriod = topHours.isEmpty() ? "none"
+                : classifyPeriod(topHours.get(0).getHour());
+
+        String insight = buildInsight(topHours, peakPeriod, completed.size());
+
+        return new BestHoursDto(allHours, topHours, peakPeriod, insight, completed.size());
+    }
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+    // Scale totalMinutes to an intensity level 0–4 relative to the user's personal max
+    private int calculateIntensity(long totalMinutes, long maxMinutes) {
+        if (totalMinutes == 0) return 0;
+        double ratio = (double) totalMinutes / maxMinutes;
+        if (ratio >= 0.80) return 4;   // peak
+        if (ratio >= 0.55) return 3;   // high
+        if (ratio >= 0.30) return 2;   // medium
+        return 1;                       // low
+    }
+
+    // "9 AM", "2 PM", "12 PM", "12 AM"
+    private String formatHour(int hour) {
+        if (hour == 0)  return "12 AM";
+        if (hour == 12) return "12 PM";
+        return hour < 12
+                ? hour + " AM"
+                : (hour - 12) + " PM";
+    }
+
+    // Broad time-of-day period for the insight sentence
+    private String classifyPeriod(int hour) {
+        if (hour >= 5  && hour < 12) return "morning";
+        if (hour >= 12 && hour < 17) return "afternoon";
+        if (hour >= 17 && hour < 21) return "evening";
+        return "night";
+    }
+
+    private String buildInsight(List<HourlyBucketDto> topHours,
+                                String peakPeriod, int totalSessions) {
+        if (topHours.isEmpty()) {
+            return "No completed sessions yet. Start focusing to see your best hours.";
+        }
+
+        HourlyBucketDto best = topHours.get(0);
+        String periodDesc = switch (peakPeriod) {
+            case "morning"   -> "a morning person";
+            case "afternoon" -> "most productive in the afternoon";
+            case "evening"   -> "an evening focuser";
+            case "night"     -> "a night owl";
+            default          -> "productive throughout the day";
+        };
+
+        if (topHours.size() >= 2) {
+            HourlyBucketDto second = topHours.get(1);
+            return String.format(
+                    "You're %s — your top focus slots are %s and %s, averaging %.0f and %.0f min per session.",
+                    periodDesc,
+                    best.getLabel(), second.getLabel(),
+                    best.getAvgMinutes(), second.getAvgMinutes()
+            );
+        }
+
+        return String.format(
+                "You're %s — your peak focus hour is %s, averaging %.0f min per session across %d sessions.",
+                periodDesc, best.getLabel(), best.getAvgMinutes(), totalSessions
+        );
+    }
+
+    // Returned when the user has no completed sessions yet
+    private BestHoursDto emptyBestHours() {
+        List<HourlyBucketDto> empty = new ArrayList<>();
+        for (int h = 0; h < 24; h++) {
+            empty.add(new HourlyBucketDto(h, formatHour(h), 0, 0, 0.0, 0));
+        }
+        return new BestHoursDto(
+                empty,
+                List.of(),
+                "none",
+                "No completed sessions yet. Start focusing to see your best hours.",
+                0
+        );
     }
     }
 

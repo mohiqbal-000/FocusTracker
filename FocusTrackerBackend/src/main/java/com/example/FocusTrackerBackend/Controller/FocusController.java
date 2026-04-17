@@ -102,6 +102,11 @@
             Long userId = userDetails.getId();
             return focusSessionsService.deleteNote(sessionId, userId);
         }
-    
+        @GetMapping("/stats/best-hours")
+        public BestHoursDto getBestHours(Authentication authentication) {
+            CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+            Long userId = userDetails.getId();
+            return focusSessionsService.getBestHours(userId);
+        }
     
     }
