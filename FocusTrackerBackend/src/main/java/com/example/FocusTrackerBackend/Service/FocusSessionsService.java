@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.TextStyle;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -314,6 +315,122 @@ public class FocusSessionsService {
                 "none",
                 "No completed sessions yet. Start focusing to see your best hours.",
                 0
+        );
+    }
+    public WeeklyTrendDto getWeeklyTrend(Long userId) {
+
+        LocalDate today = LocalDate.now();
+
+        // Load all completed sessions once — no repeated DB calls
+        List<FocusSessions> allSessions = repo.findByUser_Id(userId)
+                .stream()
+                .filter(FocusSessions::isCompleted)
+                .toList();
+
+        // ── This week: past 7 days including today ────────────────────────────
+        LocalDate weekStart = today.minusDays(6);
+
+        Map<LocalDate, List<FocusSessions>> thisWeekByDay = allSessions.stream()
+                .filter(s -> {
+                    LocalDate d = s.getStartTime().toLocalDate();
+                    return !d.isBefore(weekStart) && !d.isAfter(today);
+                })
+                .collect(Collectors.groupingBy(s -> s.getStartTime().toLocalDate()));
+
+        // Build 7 daily buckets oldest → today
+        List<DailyBucketDto> days = new ArrayList<>();
+        for (int i = 6; i >= 0; i--) {
+            LocalDate date = today.minusDays(i);
+            List<FocusSessions> daySessions = thisWeekByDay.getOrDefault(date, List.of());
+            days.add(buildBucket(date, daySessions, today));
+        }
+
+        long totalThisWeek = days.stream().mapToLong(DailyBucketDto::getTotalMinutes).sum();
+        int totalSessionsThisWeek = days.stream().mapToInt(DailyBucketDto::getSessionCount).sum();
+        int activeDays = (int) days.stream().filter(d -> d.getTotalMinutes() > 0).count();
+
+        double dailyAvg = activeDays > 0
+                ? Math.round((totalThisWeek * 10.0) / activeDays) / 10.0
+                : 0.0;
+
+        // Best day this week
+        DailyBucketDto bestDay = days.stream()
+                .max(Comparator.comparingLong(DailyBucketDto::getTotalMinutes))
+                .orElse(days.get(6));
+
+        // ── Last week: the 7 days before this week ────────────────────────────
+        LocalDate lastWeekEnd   = weekStart.minusDays(1);
+        LocalDate lastWeekStart = lastWeekEnd.minusDays(6);
+
+        long totalLastWeek = allSessions.stream()
+                .filter(s -> {
+                    LocalDate d = s.getStartTime().toLocalDate();
+                    return !d.isBefore(lastWeekStart) && !d.isAfter(lastWeekEnd);
+                })
+                .mapToLong(FocusSessions::getDuration)
+                .sum();
+
+        // ── Trend direction and percent ───────────────────────────────────────
+        String trendDirection;
+        int trendPercent;
+        String trendLabel;
+
+        if (totalLastWeek == 0 && totalThisWeek == 0) {
+            trendDirection = "FLAT";
+            trendPercent = 0;
+            trendLabel = "No data yet";
+        } else if (totalLastWeek == 0) {
+            trendDirection = "UP";
+            trendPercent = 100;
+            trendLabel = "First week of data";
+        } else {
+            double change = ((double)(totalThisWeek - totalLastWeek) / totalLastWeek) * 100;
+            trendPercent = (int) Math.abs(Math.round(change));
+
+            if (change > 5) {
+                trendDirection = "UP";
+                trendLabel = "+" + trendPercent + "% vs last week";
+            } else if (change < -5) {
+                trendDirection = "DOWN";
+                trendLabel = "-" + trendPercent + "% vs last week";
+            } else {
+                trendDirection = "FLAT";
+                trendLabel = "About the same as last week";
+            }
+        }
+
+        return new WeeklyTrendDto(
+                days,
+                totalThisWeek, totalLastWeek,
+                totalSessionsThisWeek,
+                trendDirection, trendPercent, trendLabel,
+                bestDay.getTotalMinutes(), bestDay.getFullLabel(),
+                dailyAvg, activeDays
+        );
+    }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+    private DailyBucketDto buildBucket(LocalDate date,
+                                       List<FocusSessions> sessions,
+                                       LocalDate today) {
+        long totalMinutes = sessions.stream()
+                .mapToLong(FocusSessions::getDuration)
+                .sum();
+        int count = sessions.size();
+        double avg = count > 0
+                ? Math.round((totalMinutes * 10.0) / count) / 10.0
+                : 0.0;
+
+        String dayLabel = date.getDayOfWeek()
+                .getDisplayName(TextStyle.SHORT, Locale.ENGLISH);   // "Mon", "Tue"
+        String fullLabel = dayLabel + " " + date.format(
+                java.time.format.DateTimeFormatter.ofPattern("MMM d")); // "Mon Apr 14"
+
+        return new DailyBucketDto(
+                date, dayLabel, fullLabel,
+                totalMinutes, count, avg,
+                date.equals(today)
         );
     }
     }

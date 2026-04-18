@@ -108,5 +108,10 @@
             Long userId = userDetails.getId();
             return focusSessionsService.getBestHours(userId);
         }
-    
+
+        @GetMapping("/stats/trend")
+        public WeeklyTrendDto getWeeklyTrend(Authentication authentication) {
+            CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+            return focusSessionsService.getWeeklyTrend(userDetails.getId());
+        }
     }
