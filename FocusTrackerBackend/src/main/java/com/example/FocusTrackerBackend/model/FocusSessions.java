@@ -113,6 +113,21 @@ public class FocusSessions {
         this.duration = 0;
         this.completed = false;
     }
+    public FocusSessions(User user, LocalDateTime startTime) {
+        this.user = user;
+        this.startTime = startTime;
+        this.duration = 0;
+        this.completed = false;
+        this.mode = PomodoroMode.POMODORO;   // sensible default
+    }
+    // Add this constructor — takes only User, sets startTime internally
+    public FocusSessions(User user) {
+        this.user = user;
+        this.startTime = LocalDateTime.now();
+        this.duration = 0;
+        this.completed = false;
+    }
+
 
     public User getUser() {
         return user;
