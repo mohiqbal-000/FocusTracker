@@ -114,4 +114,9 @@
             CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
             return focusSessionsService.getWeeklyTrend(userDetails.getId());
         }
+        @GetMapping("/stats/records")
+        public PersonalRecordsDto getPersonalRecords(Authentication authentication) {
+            CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+            return focusSessionsService.getPersonalRecords(userDetails.getId());
+        }
     }

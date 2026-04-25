@@ -13,6 +13,7 @@
     import java.time.Duration;
     import java.time.LocalDate;
     import java.time.LocalDateTime;
+    import java.time.format.DateTimeFormatter;
     import java.time.format.TextStyle;
     import java.util.*;
     import java.util.stream.Collectors;
@@ -431,6 +432,116 @@
                     date, dayLabel, fullLabel,
                     totalMinutes, count, avg,
                     date.equals(today)
+            );
+        }
+        public PersonalRecordsDto getPersonalRecords(Long userId) {
+
+            // Single DB load — everything calculated from this list
+            List<FocusSessions> completed = repo.findByUser_Id(userId)
+                    .stream()
+                    .filter(FocusSessions::isCompleted)
+                    .toList();
+
+            if (completed.isEmpty()) {
+                return emptyRecords();
+            }
+
+            // ── All-time totals ───────────────────────────────────────────────────────
+            long allTimeMinutes  = completed.stream()
+                    .mapToLong(FocusSessions::getDuration)
+                    .sum();
+            int allTimeSessions  = completed.size();
+
+            Set<LocalDate> activeDaySet = completed.stream()
+                    .map(s -> s.getStartTime().toLocalDate())
+                    .collect(Collectors.toSet());
+            int allTimeActiveDays = activeDaySet.size();
+
+            // ── Longest single session ────────────────────────────────────────────────
+            FocusSessions longestSession = completed.stream()
+                    .max(Comparator.comparingLong(FocusSessions::getDuration))
+                    .orElseThrow();
+
+            // ── Best day ──────────────────────────────────────────────────────────────
+            Map<LocalDate, Long> minutesByDay = completed.stream()
+                    .collect(Collectors.groupingBy(
+                            s -> s.getStartTime().toLocalDate(),
+                            Collectors.summingLong(FocusSessions::getDuration)
+                    ));
+
+            LocalDate bestDayDate = minutesByDay.entrySet().stream()
+                    .max(Map.Entry.comparingByValue())
+                    .map(Map.Entry::getKey)
+                    .orElseThrow();
+
+            long bestDayMinutes = minutesByDay.get(bestDayDate);
+
+            int bestDaySessionCount = (int) completed.stream()
+                    .filter(s -> s.getStartTime().toLocalDate().equals(bestDayDate))
+                    .count();
+
+            // ── Best streak ever ──────────────────────────────────────────────────────
+            List<LocalDate> sortedDays = activeDaySet.stream()
+                    .sorted()
+                    .toList();
+
+            int bestStreak   = 1;
+            int currentRun   = 1;
+            int bestStart    = 0;
+            int runStart     = 0;
+
+            for (int i = 1; i < sortedDays.size(); i++) {
+                boolean consecutive = sortedDays.get(i)
+                        .equals(sortedDays.get(i - 1).plusDays(1));
+                if (consecutive) {
+                    currentRun++;
+                    if (currentRun > bestStreak) {
+                        bestStreak = currentRun;
+                        bestStart  = runStart;
+                    }
+                } else {
+                    currentRun = 1;
+                    runStart   = i;
+                }
+            }
+
+            LocalDate bestStreakStartDate = sortedDays.get(bestStart);
+            LocalDate bestStreakEndDate   = bestStreakStartDate.plusDays(bestStreak - 1);
+
+            // ── Current streak ────────────────────────────────────────────────────────
+            LocalDate today = LocalDate.now();
+            int currentStreak = 0;
+            while (activeDaySet.contains(today.minusDays(currentStreak))) {
+                currentStreak++;
+            }
+
+            // ── Format dates ──────────────────────────────────────────────────────────
+            DateTimeFormatter fullFmt  = DateTimeFormatter.ofPattern("EEE MMM d");
+            DateTimeFormatter shortFmt = DateTimeFormatter.ofPattern("MMM d");
+
+            return new PersonalRecordsDto(
+                    longestSession.getDuration(),
+                    longestSession.getStartTime().toLocalDate().format(fullFmt),
+                    bestDayMinutes,
+                    bestDayDate.format(fullFmt),
+                    bestDaySessionCount,
+                    bestStreak,
+                    bestStreakStartDate.format(shortFmt),
+                    bestStreakEndDate.format(shortFmt),
+                    currentStreak,
+                    allTimeMinutes,
+                    allTimeSessions,
+                    allTimeActiveDays
+            );
+        }
+
+        private PersonalRecordsDto emptyRecords() {
+            return new PersonalRecordsDto(
+                    0, "—",
+                    0, "—", 0,
+                    0, "—", "—",
+                    0,
+                    0, 0, 0
             );
         }
         }
