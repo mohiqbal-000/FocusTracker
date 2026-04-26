@@ -12,6 +12,15 @@ public class User {
     private String password;
     private  long focustime;
 
+    // ── New profile fields ────────────────────────────────────────────────────
+    private String displayName;
+
+    @Column(nullable = false)
+    private String timezone = "UTC";        // IANA timezone e.g. "Asia/Kolkata"
+
+    private String avatarUrl;               // optional profile picture URL
+
+
     public User(){
 
     }
@@ -21,6 +30,33 @@ public class User {
         this.focustime = focustime;
         this.password = password;
         this.email = email;
+        this.timezone = "UTC";
+
+
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
+
+    public String getTimezone() {
+        return timezone;
+    }
+
+    public void setTimezone(String timezone) {
+        this.timezone = timezone;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
     }
 
     public String getEmail() {
