@@ -26,62 +26,68 @@ export default function GoalsPage() {
   const [goals, setGoals] = useState<GoalResponse[]>([]);
   const [goalType, setGoalType] = useState("");
   const [targetValue, setTargetValue] = useState(60);
-  const [userId, setUserId] = useState<number | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(true);
   const [error, setError] = useState("");
 
-  /* Load auth */
+  // ── Load token from localStorage ─────────────────────────────────────────
   useEffect(() => {
-    const id = localStorage.getItem("userId");
     const t = localStorage.getItem("token");
-    if (!id || !t) { router.push("/login"); return; }
-    setUserId(Number(id));
+    if (!t) {
+      router.push("/login");
+      return;
+    }
     setToken(t);
   }, [router]);
 
-  /* Fetch goals */
+  // ── Fetch goals — no userId in URL, backend reads it from JWT ─────────────
   useEffect(() => {
-    if (!userId || !token) return;
+    if (!token) return;
     setFetchLoading(true);
-    fetch(`${API}/Goals/${userId}`, {
+
+    fetch(`${API}/Goals`, {                          // ← /Goals only, no /${userId}
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      .then((r) => {
+        if (!r.ok) throw new Error(`${r.status}`);
+        return r.json();
+      })
       .then(setGoals)
-      .catch(() => setError("Failed to load goals"))
+      .catch((e) => setError(`Failed to load goals: ${e.message}`))
       .finally(() => setFetchLoading(false));
-  }, [userId, token]);
+  }, [token]);                                       // ← depends on token only
 
-  /* Create goal */
+  // ── Create goal — no userId in URL ────────────────────────────────────────
   const createGoal = async (goal: { goalType: string; targetValue: number }) => {
-    if (!userId || !token) return;
+    if (!token) return;
     if (!goal.goalType.trim()) { setError("Goal type is required"); return; }
+
     setLoading(true);
     setError("");
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today    = new Date().toISOString().slice(0, 10);
     const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
       .toISOString().slice(0, 10);
 
     try {
-      const res = await fetch(`${API}/Goals/${userId}`, {
+      const res = await fetch(`${API}/Goals`, {      // ← /Goals only, no /${userId}
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          goalType: goal.goalType.trim(),
+          goalType:    goal.goalType.trim(),
           targetValue: goal.targetValue,
-          startDate: today,
-          endDate: nextWeek,
+          startDate:   today,
+          endDate:     nextWeek,
         }),
       });
 
       if (!res.ok) throw new Error(await res.text());
-      const newGoal = await res.json();
+
+      const newGoal: GoalResponse = await res.json();
       setGoals((prev) => [...prev, newGoal]);
       setGoalType("");
       setTargetValue(60);
@@ -92,8 +98,8 @@ export default function GoalsPage() {
     }
   };
 
-  const achieved = goals.filter((g) => g.achieved);
   const active   = goals.filter((g) => !g.achieved);
+  const achieved = goals.filter((g) => g.achieved);
 
   return (
     <>
@@ -148,7 +154,6 @@ export default function GoalsPage() {
           gap: 40px;
         }
 
-        /* Section titles */
         .section-label {
           font-size: 11px;
           font-weight: 600;
@@ -186,7 +191,7 @@ export default function GoalsPage() {
           margin-bottom: 7px;
         }
 
-        .field input, .field select {
+        .field input {
           width: 100%;
           background: #0a0a0a;
           border: 1px solid #222;
@@ -199,12 +204,8 @@ export default function GoalsPage() {
           transition: border-color 0.2s;
         }
 
-        .field input:focus, .field select:focus { border-color: #c9a84c; }
+        .field input:focus { border-color: #c9a84c; }
         .field input::placeholder { color: #333; }
-        .field select option { background: #1a1a1a; }
-
-        .field-row { display: flex; gap: 10px; }
-        .field-row .field { flex: 1; }
 
         .btn-create {
           width: 100%;
@@ -261,7 +262,7 @@ export default function GoalsPage() {
         }
 
         .rec-name { font-size: 14px; font-weight: 500; }
-        .rec-dur { font-size: 11px; color: #555; margin-top: 1px; }
+        .rec-dur  { font-size: 11px; color: #555; margin-top: 1px; }
 
         .btn-add-rec {
           background: transparent;
@@ -275,10 +276,9 @@ export default function GoalsPage() {
           transition: all 0.15s;
         }
         .btn-add-rec:hover { border-color: #c9a84c; color: #c9a84c; }
+        .btn-add-rec:disabled { opacity: 0.4; cursor: not-allowed; }
 
-        /* Goals list */
-        .goals-right {}
-
+        /* Goal cards */
         .goals-grid {
           display: flex;
           flex-direction: column;
@@ -290,10 +290,9 @@ export default function GoalsPage() {
           background: #111;
           border: 1px solid #1e1e1e;
           border-radius: 14px;
-          padding: 20px 20px;
+          padding: 20px;
           transition: border-color 0.15s;
         }
-
         .goal-card:hover { border-color: #2a2a2a; }
         .goal-card.achieved-card { border-color: rgba(80,200,120,0.2); }
 
@@ -339,6 +338,7 @@ export default function GoalsPage() {
         }
 
         .goal-progress-text { font-size: 13px; color: #888; }
+
         .goal-pct-text {
           font-family: 'Syne', sans-serif;
           font-size: 14px;
@@ -360,7 +360,6 @@ export default function GoalsPage() {
           transition: width 0.5s ease;
           background: #c9a84c;
         }
-
         .progress-bar-fill.done { background: #50c878; }
 
         .empty-section {
@@ -395,9 +394,9 @@ export default function GoalsPage() {
         </nav>
 
         <div className="goals-body">
-          {/* Left column */}
+
+          {/* ── Left column ── */}
           <div>
-            {/* Create form */}
             <div className="create-card">
               <div className="create-title">New goal</div>
 
@@ -431,7 +430,6 @@ export default function GoalsPage() {
               {error && <div className="error-msg">{error}</div>}
             </div>
 
-            {/* Recommended */}
             <div className="section-label">Recommended</div>
             <div className="rec-card">
               {recommendedGoals.map((g, i) => (
@@ -455,13 +453,12 @@ export default function GoalsPage() {
             </div>
           </div>
 
-          {/* Right column */}
-          <div className="goals-right">
+          {/* ── Right column ── */}
+          <div>
             {fetchLoading ? (
               <div className="loading-state">Loading your goals...</div>
             ) : (
               <>
-                {/* Active goals */}
                 <div className="section-label">Active goals ({active.length})</div>
                 <div className="goals-grid">
                   {active.length === 0 ? (
@@ -470,9 +467,9 @@ export default function GoalsPage() {
                     </div>
                   ) : (
                     active.map((g) => {
-                      const pct = Math.min(100, g.targetValue > 0
-                        ? Math.round((g.progressValue / g.targetValue) * 100)
-                        : 0);
+                      const pct = g.targetValue > 0
+                        ? Math.min(100, Math.round((g.progressValue / g.targetValue) * 100))
+                        : 0;
                       return (
                         <div key={g.id} className="goal-card">
                           <div className="goal-top">
@@ -494,7 +491,6 @@ export default function GoalsPage() {
                   )}
                 </div>
 
-                {/* Achieved goals */}
                 {achieved.length > 0 && (
                   <>
                     <div className="section-label">Achieved ({achieved.length})</div>
@@ -522,6 +518,7 @@ export default function GoalsPage() {
               </>
             )}
           </div>
+
         </div>
       </div>
     </>
