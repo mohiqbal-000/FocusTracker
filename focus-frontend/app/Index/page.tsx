@@ -601,6 +601,10 @@ export default function Dashboard() {
               <span>📈 Weekly trend</span>
              <span className="quick-link-arrow">→</span>
             </button>
+            <button className="quick-link" onClick={() => router.push("/Stats/records")}>
+            <span>🏆 Personal records</span>
+            <span className="quick-link-arrow">→</span>
+            </button>
             </div>
           </aside>
         </div>
