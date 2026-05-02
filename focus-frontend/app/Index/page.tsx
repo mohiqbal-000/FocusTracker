@@ -590,12 +590,17 @@ export default function Dashboard() {
                 ))}
               </div>
             )}
+            
 
             <div className="quick-links">
               <button className="quick-link" onClick={() => router.push("/Goals")}>
                 <span>🎯 Manage goals</span>
                 <span className="quick-link-arrow">→</span>
               </button>
+              <button className="quick-link" onClick={() => router.push("/Stats/trend")}>
+              <span>📈 Weekly trend</span>
+             <span className="quick-link-arrow">→</span>
+            </button>
             </div>
           </aside>
         </div>
