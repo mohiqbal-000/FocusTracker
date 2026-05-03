@@ -22,11 +22,17 @@ export default function Dashboard() {
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
+  // ── Daily stats ───────────────────────────────────────────────────────────
   const [dailyMinutes, setDailyMinutes] = useState(0);
   const [dailySessions, setDailySessions] = useState(0);
   const [streakDays, setStreakDays] = useState(0);
   const [goalTarget, setGoalTarget] = useState<number | null>(null);
   const [goalProgress, setGoalProgress] = useState(0);
+
+  // ── Monthly stats — NEW ───────────────────────────────────────────────────
+  const [monthlyMinutes, setMonthlyMinutes] = useState(0);
+  const [monthlySessions, setMonthlySessions] = useState(0);
+
   const [history, setHistory] = useState<FocusSession[]>([]);
   const [loading, setLoading] = useState(false);
   const [tag, setTag] = useState("");
@@ -47,23 +53,35 @@ export default function Dashboard() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [startTime]);
 
-  /* Refresh stats */
+  /* Refresh stats — now fetches monthly too */
   const refreshStats = async (t: string) => {
     const h = { Authorization: `Bearer ${t}` };
     try {
-      const [daily, streak, hist] = await Promise.all([
-        fetch(`${API}/focus/stats/daily`, { headers: h }).then(r => r.json()),
-        fetch(`${API}/focus/stats/streak`, { headers: h }).then(r => r.json()),
-        fetch(`${API}/focus/history`, { headers: h }).then(r => r.json()),
+      const [daily, streak, hist, monthly] = await Promise.all([
+        fetch(`${API}/focus/stats/daily`,   { headers: h }).then(r => r.json()),
+        fetch(`${API}/focus/stats/streak`,  { headers: h }).then(r => r.json()),
+        fetch(`${API}/focus/history`,       { headers: h }).then(r => r.json()),
+        fetch(`${API}/focus/stats/monthly`, { headers: h }).then(r => r.json()),
       ]);
+
+      // Daily
       setDailyMinutes(daily.totalMinutes ?? 0);
       setDailySessions(daily.totalSessions ?? 0);
       if (daily.goalSet) {
         setGoalTarget(daily.targetMinutes);
         setGoalProgress(daily.progressPercent ?? 0);
       }
+
+      // Streak
       setStreakDays(streak.streakDays ?? streak.streak ?? 0);
+
+      // History
       setHistory(Array.isArray(hist) ? hist.slice(0, 8) : []);
+
+      // Monthly — NEW
+      setMonthlyMinutes(monthly.totalMinutes ?? 0);
+      setMonthlySessions(monthly.totalSessions ?? 0);
+
     } catch (e) {
       console.error("Stats error", e);
     }
@@ -131,6 +149,18 @@ export default function Dashboard() {
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 
+  // Format minutes as "2h 30m" or "45m"
+  const fmtHours = (m: number) => {
+    if (m === 0) return "0m";
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    if (h === 0) return `${min}m`;
+    if (min === 0) return `${h}h`;
+    return `${h}h ${min}m`;
+  };
+
+  const currentMonthName = new Date().toLocaleString("en-US", { month: "long" });
+
   const isRunning = !!sessionId;
   const ringPct = Math.min(100, (elapsedSeconds / (25 * 60)) * 100);
   const circumference = 2 * Math.PI * 88;
@@ -159,7 +189,6 @@ export default function Dashboard() {
           padding: 20px 40px;
           border-bottom: 1px solid #181818;
         }
-
         .nav-brand {
           font-family: 'Syne', sans-serif;
           font-size: 13px;
@@ -168,9 +197,7 @@ export default function Dashboard() {
           text-transform: uppercase;
           color: #c9a84c;
         }
-
         .nav-actions { display: flex; gap: 12px; align-items: center; }
-
         .nav-btn {
           background: transparent;
           border: 1px solid #222;
@@ -193,9 +220,140 @@ export default function Dashboard() {
           grid-template-columns: 1fr 380px;
           gap: 0;
         }
-
         .dash-main { padding: 48px 40px; border-right: 1px solid #181818; }
         .dash-side { padding: 48px 32px; }
+
+        /* ── Stats grid — now 3 cols daily + 1 wide monthly ── */
+        .stats-top {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+
+        /* Monthly card — full width below daily row */
+        .monthly-card {
+          background: #111;
+          border: 1px solid #1e1e1e;
+          border-radius: 12px;
+          padding: 18px 20px;
+          margin-bottom: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          transition: border-color 0.15s;
+          cursor: pointer;
+        }
+        .monthly-card:hover { border-color: #2a2a2a; }
+
+        .monthly-left { display: flex; flex-direction: column; gap: 3px; }
+
+        .monthly-label {
+          font-size: 10px;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          color: #444;
+        }
+
+        .monthly-value {
+          font-family: 'Syne', sans-serif;
+          font-size: 24px;
+          font-weight: 800;
+          color: #f0ede6;
+          line-height: 1;
+        }
+
+        .monthly-sub { font-size: 12px; color: #444; margin-top: 2px; }
+
+        .monthly-right {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 3px;
+        }
+
+        .monthly-sessions-val {
+          font-family: 'Syne', sans-serif;
+          font-size: 20px;
+          font-weight: 700;
+          color: #888;
+        }
+
+        .monthly-sessions-label {
+          font-size: 10px;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          color: #333;
+        }
+
+        .monthly-arrow {
+          font-size: 12px;
+          color: #2a2a2a;
+          margin-top: 6px;
+          transition: color 0.15s;
+        }
+        .monthly-card:hover .monthly-arrow { color: #c9a84c; }
+
+        /* Daily stat cards */
+        .stat-card {
+          background: #111;
+          border: 1px solid #1e1e1e;
+          border-radius: 12px;
+          padding: 20px 16px;
+        }
+        .stat-value {
+          font-family: 'Syne', sans-serif;
+          font-size: 26px;
+          font-weight: 800;
+          color: #f0ede6;
+          margin-bottom: 4px;
+        }
+        .stat-name {
+          font-size: 11px;
+          color: #444;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        /* Goal bar */
+        .goal-section {
+          background: #111;
+          border: 1px solid #1e1e1e;
+          border-radius: 12px;
+          padding: 20px;
+          margin-bottom: 32px;
+        }
+        .goal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 12px;
+        }
+        .goal-title {
+          font-size: 12px;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          color: #555;
+        }
+        .goal-pct {
+          font-family: 'Syne', sans-serif;
+          font-size: 14px;
+          font-weight: 700;
+          color: #c9a84c;
+        }
+        .goal-bar-bg {
+          height: 4px;
+          background: #1e1e1e;
+          border-radius: 2px;
+          overflow: hidden;
+        }
+        .goal-bar-fill {
+          height: 100%;
+          background: #c9a84c;
+          border-radius: 2px;
+          transition: width 0.6s ease;
+        }
+        .goal-desc { margin-top: 8px; font-size: 12px; color: #444; }
 
         /* Timer section */
         .timer-section {
@@ -204,7 +362,6 @@ export default function Dashboard() {
           align-items: center;
           margin-bottom: 48px;
         }
-
         .timer-label {
           font-size: 11px;
           letter-spacing: 0.2em;
@@ -212,13 +369,9 @@ export default function Dashboard() {
           color: #555;
           margin-bottom: 32px;
         }
-
         .ring-wrap { position: relative; margin-bottom: 32px; }
-
         .ring-svg { transform: rotate(-90deg); }
-
         .ring-bg { fill: none; stroke: #1a1a1a; stroke-width: 3; }
-
         .ring-progress {
           fill: none;
           stroke: #c9a84c;
@@ -226,16 +379,13 @@ export default function Dashboard() {
           stroke-linecap: round;
           transition: stroke-dashoffset 0.5s ease;
         }
-
         .ring-running .ring-progress { stroke: #e8b84b; }
-
         .timer-center {
           position: absolute;
           top: 50%; left: 50%;
           transform: translate(-50%, -50%);
           text-align: center;
         }
-
         .timer-digits {
           font-family: 'DM Mono', monospace;
           font-size: 42px;
@@ -244,22 +394,10 @@ export default function Dashboard() {
           line-height: 1;
           color: #f0ede6;
         }
-
-        .timer-sub {
-          font-size: 11px;
-          color: #444;
-          margin-top: 6px;
-          letter-spacing: 0.08em;
-        }
+        .timer-sub { font-size: 11px; color: #444; margin-top: 6px; letter-spacing: 0.08em; }
 
         /* Tag input */
-        .tag-row {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          margin-bottom: 20px;
-        }
-
+        .tag-row { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
         .tag-input {
           background: #111;
           border: 1px solid #222;
@@ -276,7 +414,7 @@ export default function Dashboard() {
         .tag-input::placeholder { color: #333; }
         .tag-label { font-size: 12px; color: #555; }
 
-        /* CTA Button */
+        /* CTA buttons */
         .cta-btn {
           display: flex;
           align-items: center;
@@ -292,100 +430,11 @@ export default function Dashboard() {
           cursor: pointer;
           transition: all 0.2s;
         }
-
-        .cta-btn.start {
-          background: #c9a84c;
-          color: #0a0a0a;
-        }
+        .cta-btn.start { background: #c9a84c; color: #0a0a0a; }
         .cta-btn.start:hover { background: #d4b35e; }
-
-        .cta-btn.stop {
-          background: transparent;
-          border: 2px solid #e06060;
-          color: #e06060;
-        }
+        .cta-btn.stop { background: transparent; border: 2px solid #e06060; color: #e06060; }
         .cta-btn.stop:hover { background: rgba(220,96,96,0.1); }
         .cta-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        /* Stats grid */
-        .stats-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 12px;
-          margin-bottom: 40px;
-        }
-
-        .stat-card {
-          background: #111;
-          border: 1px solid #1e1e1e;
-          border-radius: 12px;
-          padding: 20px 16px;
-        }
-
-        .stat-value {
-          font-family: 'Syne', sans-serif;
-          font-size: 26px;
-          font-weight: 800;
-          color: #f0ede6;
-          margin-bottom: 4px;
-        }
-
-        .stat-name {
-          font-size: 11px;
-          color: #444;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-        }
-
-        /* Goal bar */
-        .goal-section {
-          background: #111;
-          border: 1px solid #1e1e1e;
-          border-radius: 12px;
-          padding: 20px 20px;
-          margin-bottom: 32px;
-        }
-
-        .goal-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 12px;
-        }
-
-        .goal-title {
-          font-size: 12px;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: #555;
-        }
-
-        .goal-pct {
-          font-family: 'Syne', sans-serif;
-          font-size: 14px;
-          font-weight: 700;
-          color: #c9a84c;
-        }
-
-        .goal-bar-bg {
-          height: 4px;
-          background: #1e1e1e;
-          border-radius: 2px;
-          overflow: hidden;
-        }
-
-        .goal-bar-fill {
-          height: 100%;
-          background: #c9a84c;
-          border-radius: 2px;
-          transition: width 0.6s ease;
-        }
-
-        .goal-desc {
-          margin-top: 8px;
-          font-size: 12px;
-          color: #444;
-        }
 
         /* Side panel */
         .side-title {
@@ -397,9 +446,7 @@ export default function Dashboard() {
           color: #555;
           margin-bottom: 20px;
         }
-
         .history-list { display: flex; flex-direction: column; gap: 10px; }
-
         .history-item {
           display: flex;
           align-items: center;
@@ -410,34 +457,20 @@ export default function Dashboard() {
           padding: 14px 16px;
           transition: border-color 0.15s;
         }
-
         .history-item:hover { border-color: #2a2a2a; }
-
         .history-left { display: flex; flex-direction: column; gap: 3px; }
         .history-date { font-size: 13px; color: #888; }
         .history-note { font-size: 11px; color: #444; font-style: italic; }
-
         .history-dur {
           font-family: 'DM Mono', monospace;
           font-size: 14px;
           color: #c9a84c;
           font-weight: 500;
         }
+        .empty-state { text-align: center; padding: 40px 20px; color: #333; font-size: 14px; }
 
-        .empty-state {
-          text-align: center;
-          padding: 40px 20px;
-          color: #333;
-          font-size: 14px;
-        }
-
-        .quick-links {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          margin-top: 32px;
-        }
-
+        /* Quick links */
+        .quick-links { display: flex; flex-direction: column; gap: 8px; margin-top: 32px; }
         .quick-link {
           display: flex;
           align-items: center;
@@ -452,7 +485,6 @@ export default function Dashboard() {
           transition: all 0.15s;
           font-family: 'DM Sans', sans-serif;
         }
-
         .quick-link:hover { border-color: #c9a84c; color: #f0ede6; }
         .quick-link-arrow { color: #333; transition: color 0.15s; }
         .quick-link:hover .quick-link-arrow { color: #c9a84c; }
@@ -462,7 +494,7 @@ export default function Dashboard() {
           .dash-main { border-right: none; border-bottom: 1px solid #181818; padding: 32px 24px; }
           .dash-side { padding: 32px 24px; }
           .nav { padding: 16px 24px; }
-          .stats-grid { grid-template-columns: repeat(3, 1fr); }
+          .stats-top { grid-template-columns: repeat(3, 1fr); }
         }
       `}</style>
 
@@ -483,8 +515,9 @@ export default function Dashboard() {
         <div className="dash-body">
           {/* Main */}
           <main className="dash-main">
-            {/* Stats */}
-            <div className="stats-grid">
+
+            {/* Daily stats — 3 cols */}
+            <div className="stats-top">
               <div className="stat-card">
                 <div className="stat-value">{dailyMinutes}</div>
                 <div className="stat-name">min today</div>
@@ -496,6 +529,24 @@ export default function Dashboard() {
               <div className="stat-card">
                 <div className="stat-value">🔥 {streakDays}</div>
                 <div className="stat-name">day streak</div>
+              </div>
+            </div>
+
+            {/* Monthly card — full width, clickable → trend page */}
+            <div
+              className="monthly-card"
+              onClick={() => router.push("/Stats/trend")}
+              title="View weekly trend"
+            >
+              <div className="monthly-left">
+                <span className="monthly-label">{currentMonthName}</span>
+                <span className="monthly-value">{fmtHours(monthlyMinutes)}</span>
+                <span className="monthly-sub">focus this month</span>
+              </div>
+              <div className="monthly-right">
+                <span className="monthly-sessions-val">{monthlySessions}</span>
+                <span className="monthly-sessions-label">sessions</span>
+                <span className="monthly-arrow">View trend →</span>
               </div>
             </div>
 
@@ -538,7 +589,6 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Tag input (only when not running) */}
               {!isRunning && (
                 <div className="tag-row">
                   <span className="tag-label">Tag</span>
@@ -552,19 +602,11 @@ export default function Dashboard() {
               )}
 
               {!isRunning ? (
-                <button
-                  className="cta-btn start"
-                  onClick={startSession}
-                  disabled={loading}
-                >
+                <button className="cta-btn start" onClick={startSession} disabled={loading}>
                   {loading ? "Starting..." : "▶ Start focus"}
                 </button>
               ) : (
-                <button
-                  className="cta-btn stop"
-                  onClick={stopSession}
-                  disabled={loading}
-                >
+                <button className="cta-btn stop" onClick={stopSession} disabled={loading}>
                   {loading ? "Stopping..." : "■ Stop session"}
                 </button>
               )}
@@ -590,7 +632,6 @@ export default function Dashboard() {
                 ))}
               </div>
             )}
-            
 
             <div className="quick-links">
               <button className="quick-link" onClick={() => router.push("/Goals")}>
@@ -598,17 +639,17 @@ export default function Dashboard() {
                 <span className="quick-link-arrow">→</span>
               </button>
               <button className="quick-link" onClick={() => router.push("/Stats/trend")}>
-              <span>📈 Weekly trend</span>
-             <span className="quick-link-arrow">→</span>
-            </button>
-            <button className="quick-link" onClick={() => router.push("/Stats/records")}>
-            <span>🏆 Personal records</span>
-            <span className="quick-link-arrow">→</span>
-            </button>
-            <button className="quick-link" onClick={() => router.push("/Stats/best-hours")}>
-            <span>🕐 Best focus hours</span>
-            <span className="quick-link-arrow">→</span>
-            </button>
+                <span>📈 Weekly trend</span>
+                <span className="quick-link-arrow">→</span>
+              </button>
+              <button className="quick-link" onClick={() => router.push("/Stats/best-hours")}>
+                <span>🕐 Best focus hours</span>
+                <span className="quick-link-arrow">→</span>
+              </button>
+              <button className="quick-link" onClick={() => router.push("/Stats/records")}>
+                <span>🏆 Personal records</span>
+                <span className="quick-link-arrow">→</span>
+              </button>
             </div>
           </aside>
         </div>
