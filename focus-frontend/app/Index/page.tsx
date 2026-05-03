@@ -605,6 +605,10 @@ export default function Dashboard() {
             <span>🏆 Personal records</span>
             <span className="quick-link-arrow">→</span>
             </button>
+            <button className="quick-link" onClick={() => router.push("/Stats/best-hours")}>
+            <span>🕐 Best focus hours</span>
+            <span className="quick-link-arrow">→</span>
+            </button>
             </div>
           </aside>
         </div>
