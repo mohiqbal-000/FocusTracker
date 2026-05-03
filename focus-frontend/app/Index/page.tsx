@@ -37,6 +37,14 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [tag, setTag] = useState("");
 
+  // ── Post-session note ─────────────────────────────────────────────────────
+  // stoppedSessionId is set when a session finishes — triggers the note panel
+  const [stoppedSessionId, setStoppedSessionId] = useState<number | null>(null);
+  const [stoppedDuration, setStoppedDuration] = useState(0);
+  const [noteText, setNoteText] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteSaved, setNoteSaved] = useState(false);
+
   /* Load JWT */
   useEffect(() => {
     const t = localStorage.getItem("token");
@@ -114,7 +122,7 @@ export default function Dashboard() {
     }
   };
 
-  /* Stop session */
+  /* Stop session — shows note panel before clearing state */
   const stopSession = async () => {
     if (!token || !sessionId) return;
     setLoading(true);
@@ -123,16 +131,61 @@ export default function Dashboard() {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
       });
+
+      // Store which session just finished so note panel can reference it
+      setStoppedSessionId(sessionId);
+      setStoppedDuration(Math.floor(elapsedSeconds / 60));
+      setNoteText("");
+      setNoteSaved(false);
+
+      // Clear timer UI immediately
       setSessionId(null);
       setStartTime(null);
       setElapsedSeconds(0);
       if (intervalRef.current) clearInterval(intervalRef.current);
+
+      // Refresh stats in background — note panel stays visible
       await refreshStats(token);
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
+  };
+
+  /* Save note to the just-completed session */
+  const saveNote = async () => {
+    if (!token || !stoppedSessionId || !noteText.trim()) return;
+    setNoteSaving(true);
+    try {
+      const res = await fetch(`${API}/focus/${stoppedSessionId}/note`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ note: noteText.trim() }),
+      });
+      if (!res.ok) throw new Error("Failed to save note");
+      setNoteSaved(true);
+      // Update history in place so the note appears immediately
+      setHistory((prev) =>
+        prev.map((h) =>
+          h.id === stoppedSessionId ? { ...h, note: noteText.trim() } : h
+        )
+      );
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setNoteSaving(false);
+    }
+  };
+
+  /* Dismiss the note panel */
+  const dismissNote = () => {
+    setStoppedSessionId(null);
+    setNoteText("");
+    setNoteSaved(false);
   };
 
   const logout = () => {
@@ -489,6 +542,124 @@ export default function Dashboard() {
         .quick-link-arrow { color: #333; transition: color 0.15s; }
         .quick-link:hover .quick-link-arrow { color: #c9a84c; }
 
+        /* ── Note panel ── */
+        .note-panel {
+          background: #111;
+          border: 1px solid #2a2a2a;
+          border-radius: 14px;
+          padding: 20px 20px;
+          margin-bottom: 20px;
+          animation: slideDown 0.2s ease;
+        }
+
+        @keyframes slideDown {
+          from { opacity: 0; transform: translateY(-8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .note-panel-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          margin-bottom: 14px;
+        }
+
+        .note-panel-title {
+          font-family: 'Syne', sans-serif;
+          font-size: 14px;
+          font-weight: 700;
+          color: #f0ede6;
+          margin-bottom: 3px;
+        }
+
+        .note-panel-sub {
+          font-size: 12px;
+          color: #555;
+        }
+
+        .note-dismiss {
+          background: transparent;
+          border: none;
+          color: #333;
+          font-size: 18px;
+          cursor: pointer;
+          line-height: 1;
+          padding: 0 2px;
+          transition: color 0.15s;
+        }
+        .note-dismiss:hover { color: #888; }
+
+        .note-textarea {
+          width: 100%;
+          background: #0a0a0a;
+          border: 1px solid #222;
+          border-radius: 8px;
+          padding: 12px 14px;
+          font-size: 13px;
+          font-family: 'DM Sans', sans-serif;
+          color: #f0ede6;
+          outline: none;
+          resize: none;
+          line-height: 1.6;
+          transition: border-color 0.2s;
+          min-height: 80px;
+        }
+        .note-textarea:focus { border-color: #c9a84c; }
+        .note-textarea::placeholder { color: #2a2a2a; }
+
+        .note-char-count {
+          text-align: right;
+          font-size: 10px;
+          color: #2a2a2a;
+          margin-top: 4px;
+          margin-bottom: 10px;
+          font-family: 'DM Mono', monospace;
+        }
+        .note-char-count.warn { color: #c9a84c; }
+
+        .note-actions {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+        }
+
+        .btn-save-note {
+          background: #c9a84c;
+          color: #0a0a0a;
+          border: none;
+          border-radius: 7px;
+          padding: 9px 18px;
+          font-size: 13px;
+          font-weight: 600;
+          font-family: 'DM Sans', sans-serif;
+          cursor: pointer;
+          transition: opacity 0.15s;
+        }
+        .btn-save-note:hover { opacity: 0.88; }
+        .btn-save-note:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .btn-skip-note {
+          background: transparent;
+          border: 1px solid #222;
+          border-radius: 7px;
+          padding: 9px 14px;
+          font-size: 13px;
+          font-family: 'DM Sans', sans-serif;
+          color: #555;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+        .btn-skip-note:hover { border-color: #444; color: #888; }
+
+        .note-saved-msg {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 12px;
+          color: #4ade80;
+          margin-left: 4px;
+        }
+
         @media (max-width: 900px) {
           .dash-body { grid-template-columns: 1fr; }
           .dash-main { border-right: none; border-bottom: 1px solid #181818; padding: 32px 24px; }
@@ -564,6 +735,64 @@ export default function Dashboard() {
                   {dailyMinutes} / {goalTarget} min
                   {goalProgress >= 100 ? " · ✓ Goal reached!" : ""}
                 </div>
+              </div>
+            )}
+
+            {/* ── Note panel — appears after a session stops ── */}
+            {stoppedSessionId !== null && (
+              <div className="note-panel">
+                <div className="note-panel-header">
+                  <div>
+                    <div className="note-panel-title">
+                      {noteSaved ? "✓ Note saved" : "Session complete"}
+                    </div>
+                    <div className="note-panel-sub">
+                      {stoppedDuration > 0
+                        ? `${stoppedDuration} min · what did you work on?`
+                        : "What did you work on?"}
+                    </div>
+                  </div>
+                  <button className="note-dismiss" onClick={dismissNote} title="Dismiss">
+                    ×
+                  </button>
+                </div>
+
+                {!noteSaved ? (
+                  <>
+                    <textarea
+                      className="note-textarea"
+                      placeholder="e.g. Finished chapter 3, debugged the auth flow..."
+                      value={noteText}
+                      maxLength={500}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      autoFocus
+                    />
+                    <div className={`note-char-count ${noteText.length > 420 ? "warn" : ""}`}>
+                      {noteText.length} / 500
+                    </div>
+                    <div className="note-actions">
+                      <button
+                        className="btn-save-note"
+                        disabled={noteSaving || !noteText.trim()}
+                        onClick={saveNote}
+                      >
+                        {noteSaving ? "Saving..." : "Save note"}
+                      </button>
+                      <button className="btn-skip-note" onClick={dismissNote}>
+                        Skip
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="note-actions">
+                    <span className="note-saved-msg">
+                      ✓ &ldquo;{noteText.length > 60 ? noteText.slice(0, 60) + "…" : noteText}&rdquo;
+                    </span>
+                    <button className="btn-skip-note" onClick={dismissNote}>
+                      Dismiss
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
