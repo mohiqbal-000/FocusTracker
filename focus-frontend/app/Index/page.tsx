@@ -9,6 +9,13 @@ type FocusSession = {
   endTime: string;
   duration: number;
   note?: string;
+  tag?: { id: number; name: string; color: string | null };
+};
+
+type Tag = {
+  id: number;
+  name: string;
+  color: string | null;
 };
 
 const API = "http://localhost:8080/api";
@@ -22,28 +29,39 @@ export default function Dashboard() {
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  // ── Daily stats ───────────────────────────────────────────────────────────
+  // Daily stats
   const [dailyMinutes, setDailyMinutes] = useState(0);
   const [dailySessions, setDailySessions] = useState(0);
   const [streakDays, setStreakDays] = useState(0);
   const [goalTarget, setGoalTarget] = useState<number | null>(null);
   const [goalProgress, setGoalProgress] = useState(0);
 
-  // ── Monthly stats — NEW ───────────────────────────────────────────────────
+  // Monthly stats
   const [monthlyMinutes, setMonthlyMinutes] = useState(0);
   const [monthlySessions, setMonthlySessions] = useState(0);
 
+  // History + tag state
   const [history, setHistory] = useState<FocusSession[]>([]);
+  const [filteredHistory, setFilteredHistory] = useState<FocusSession[]>([]);
+  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+  const [filterLoading, setFilterLoading] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [tag, setTag] = useState("");
 
-  // ── Post-session note ─────────────────────────────────────────────────────
-  // stoppedSessionId is set when a session finishes — triggers the note panel
+  // Post-session note panel
   const [stoppedSessionId, setStoppedSessionId] = useState<number | null>(null);
   const [stoppedDuration, setStoppedDuration] = useState(0);
   const [noteText, setNoteText] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteSaved, setNoteSaved] = useState(false);
+
+  // History row inline edit/delete
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   /* Load JWT */
   useEffect(() => {
@@ -61,18 +79,18 @@ export default function Dashboard() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [startTime]);
 
-  /* Refresh stats — now fetches monthly too */
+  /* Refresh all stats */
   const refreshStats = async (t: string) => {
     const h = { Authorization: `Bearer ${t}` };
     try {
-      const [daily, streak, hist, monthly] = await Promise.all([
+      const [daily, streak, hist, monthly, tags] = await Promise.all([
         fetch(`${API}/focus/stats/daily`,   { headers: h }).then(r => r.json()),
         fetch(`${API}/focus/stats/streak`,  { headers: h }).then(r => r.json()),
         fetch(`${API}/focus/history`,       { headers: h }).then(r => r.json()),
         fetch(`${API}/focus/stats/monthly`, { headers: h }).then(r => r.json()),
+        fetch(`${API}/tags`,                { headers: h }).then(r => r.ok ? r.json() : []),
       ]);
 
-      // Daily
       setDailyMinutes(daily.totalMinutes ?? 0);
       setDailySessions(daily.totalSessions ?? 0);
       if (daily.goalSet) {
@@ -80,16 +98,16 @@ export default function Dashboard() {
         setGoalProgress(daily.progressPercent ?? 0);
       }
 
-      // Streak
       setStreakDays(streak.streakDays ?? streak.streak ?? 0);
 
-      // History
-      setHistory(Array.isArray(hist) ? hist.slice(0, 8) : []);
+      const histList = Array.isArray(hist) ? hist.slice(0, 8) : [];
+      setHistory(histList);
+      setFilteredHistory(histList);
 
-      // Monthly — NEW
       setMonthlyMinutes(monthly.totalMinutes ?? 0);
       setMonthlySessions(monthly.totalSessions ?? 0);
 
+      setAvailableTags(Array.isArray(tags) ? tags : []);
     } catch (e) {
       console.error("Stats error", e);
     }
@@ -98,6 +116,26 @@ export default function Dashboard() {
   useEffect(() => {
     if (token) refreshStats(token);
   }, [token]);
+
+  /* Filter history by tag */
+  const filterByTag = async (tagName: string | null) => {
+    if (!token) return;
+    setActiveFilter(tagName);
+    setFilterLoading(true);
+    try {
+      const url = tagName
+        ? `${API}/focus/history?tag=${encodeURIComponent(tagName)}`
+        : `${API}/focus/history`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error("Failed to filter");
+      const data = await res.json();
+      setFilteredHistory(Array.isArray(data) ? data.slice(0, 20) : []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setFilterLoading(false);
+    }
+  };
 
   /* Start session */
   const startSession = async () => {
@@ -122,7 +160,7 @@ export default function Dashboard() {
     }
   };
 
-  /* Stop session — shows note panel before clearing state */
+  /* Stop session */
   const stopSession = async () => {
     if (!token || !sessionId) return;
     setLoading(true);
@@ -131,20 +169,14 @@ export default function Dashboard() {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
       });
-
-      // Store which session just finished so note panel can reference it
       setStoppedSessionId(sessionId);
       setStoppedDuration(Math.floor(elapsedSeconds / 60));
       setNoteText("");
       setNoteSaved(false);
-
-      // Clear timer UI immediately
       setSessionId(null);
       setStartTime(null);
       setElapsedSeconds(0);
       if (intervalRef.current) clearInterval(intervalRef.current);
-
-      // Refresh stats in background — note panel stays visible
       await refreshStats(token);
     } catch (e) {
       console.error(e);
@@ -153,27 +185,22 @@ export default function Dashboard() {
     }
   };
 
-  /* Save note to the just-completed session */
+  /* Save post-session note */
   const saveNote = async () => {
     if (!token || !stoppedSessionId || !noteText.trim()) return;
     setNoteSaving(true);
     try {
       const res = await fetch(`${API}/focus/${stoppedSessionId}/note`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ note: noteText.trim() }),
       });
       if (!res.ok) throw new Error("Failed to save note");
       setNoteSaved(true);
-      // Update history in place so the note appears immediately
-      setHistory((prev) =>
-        prev.map((h) =>
-          h.id === stoppedSessionId ? { ...h, note: noteText.trim() } : h
-        )
-      );
+      const updater = (prev: FocusSession[]) =>
+        prev.map((h) => h.id === stoppedSessionId ? { ...h, note: noteText.trim() } : h);
+      setHistory(updater);
+      setFilteredHistory(updater);
     } catch (e) {
       console.error(e);
     } finally {
@@ -181,11 +208,73 @@ export default function Dashboard() {
     }
   };
 
-  /* Dismiss the note panel */
   const dismissNote = () => {
     setStoppedSessionId(null);
     setNoteText("");
     setNoteSaved(false);
+  };
+
+  /* Open inline editor for history row */
+  const openEdit = (session: FocusSession) => {
+    setEditingId(session.id);
+    setEditDraft(session.note ?? "");
+  };
+
+  /* Save edited note */
+  const saveEditedNote = async (sid: number) => {
+    if (!token) return;
+    setEditSaving(true);
+    try {
+      if (editDraft.trim() === "") {
+        const res = await fetch(`${API}/focus/${sid}/note`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error("Failed to delete note");
+        const updater = (prev: FocusSession[]) =>
+          prev.map((h) => h.id === sid ? { ...h, note: undefined } : h);
+        setHistory(updater);
+        setFilteredHistory(updater);
+      } else {
+        const res = await fetch(`${API}/focus/${sid}/note`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ note: editDraft.trim() }),
+        });
+        if (!res.ok) throw new Error("Failed to save note");
+        const updater = (prev: FocusSession[]) =>
+          prev.map((h) => h.id === sid ? { ...h, note: editDraft.trim() } : h);
+        setHistory(updater);
+        setFilteredHistory(updater);
+      }
+      setEditingId(null);
+      setEditDraft("");
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  /* Delete note */
+  const deleteNote = async (sid: number) => {
+    if (!token) return;
+    setDeletingId(sid);
+    try {
+      const res = await fetch(`${API}/focus/${sid}/note`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to delete note");
+      const updater = (prev: FocusSession[]) =>
+        prev.map((h) => h.id === sid ? { ...h, note: undefined } : h);
+      setHistory(updater);
+      setFilteredHistory(updater);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const logout = () => {
@@ -197,12 +286,9 @@ export default function Dashboard() {
   const formatTime = (s: number) =>
     `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
-  const formatDate = (iso: string) => {
-    const d = new Date(iso);
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  };
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-  // Format minutes as "2h 30m" or "45m"
   const fmtHours = (m: number) => {
     if (m === 0) return "0m";
     const h = Math.floor(m / 60);
@@ -213,7 +299,6 @@ export default function Dashboard() {
   };
 
   const currentMonthName = new Date().toLocaleString("en-US", { month: "long" });
-
   const isRunning = !!sessionId;
   const ringPct = Math.min(100, (elapsedSeconds / (25 * 60)) * 100);
   const circumference = 2 * Math.PI * 88;
@@ -222,443 +307,153 @@ export default function Dashboard() {
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
-
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        .dash-root {
-          min-height: 100vh;
-          background: #0a0a0a;
-          color: #f0ede6;
-          font-family: 'DM Sans', sans-serif;
-          display: flex;
-          flex-direction: column;
-        }
+        .dash-root { min-height: 100vh; background: #0a0a0a; color: #f0ede6; font-family: 'DM Sans', sans-serif; display: flex; flex-direction: column; }
 
-        /* Nav */
-        .nav {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 20px 40px;
-          border-bottom: 1px solid #181818;
-        }
-        .nav-brand {
-          font-family: 'Syne', sans-serif;
-          font-size: 13px;
-          font-weight: 800;
-          letter-spacing: 0.2em;
-          text-transform: uppercase;
-          color: #c9a84c;
-        }
+        .nav { display: flex; align-items: center; justify-content: space-between; padding: 20px 40px; border-bottom: 1px solid #181818; }
+        .nav-brand { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; color: #c9a84c; }
         .nav-actions { display: flex; gap: 12px; align-items: center; }
-        .nav-btn {
-          background: transparent;
-          border: 1px solid #222;
-          border-radius: 6px;
-          padding: 8px 16px;
-          font-size: 13px;
-          font-family: 'DM Sans', sans-serif;
-          color: #888;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
+        .nav-btn { background: transparent; border: 1px solid #222; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-family: 'DM Sans', sans-serif; color: #888; cursor: pointer; transition: all 0.15s; }
         .nav-btn:hover { border-color: #444; color: #f0ede6; }
         .nav-btn.gold { border-color: #c9a84c; color: #c9a84c; }
         .nav-btn.gold:hover { background: #c9a84c; color: #0a0a0a; }
 
-        /* Layout */
-        .dash-body {
-          flex: 1;
-          display: grid;
-          grid-template-columns: 1fr 380px;
-          gap: 0;
-        }
+        .dash-body { flex: 1; display: grid; grid-template-columns: 1fr 380px; }
         .dash-main { padding: 48px 40px; border-right: 1px solid #181818; }
         .dash-side { padding: 48px 32px; }
 
-        /* ── Stats grid — now 3 cols daily + 1 wide monthly ── */
-        .stats-top {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 12px;
-          margin-bottom: 12px;
-        }
+        .stats-top { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 12px; }
 
-        /* Monthly card — full width below daily row */
-        .monthly-card {
-          background: #111;
-          border: 1px solid #1e1e1e;
-          border-radius: 12px;
-          padding: 18px 20px;
-          margin-bottom: 20px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          transition: border-color 0.15s;
-          cursor: pointer;
-        }
+        .monthly-card { background: #111; border: 1px solid #1e1e1e; border-radius: 12px; padding: 18px 20px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; transition: border-color 0.15s; cursor: pointer; }
         .monthly-card:hover { border-color: #2a2a2a; }
-
         .monthly-left { display: flex; flex-direction: column; gap: 3px; }
-
-        .monthly-label {
-          font-size: 10px;
-          letter-spacing: 0.14em;
-          text-transform: uppercase;
-          color: #444;
-        }
-
-        .monthly-value {
-          font-family: 'Syne', sans-serif;
-          font-size: 24px;
-          font-weight: 800;
-          color: #f0ede6;
-          line-height: 1;
-        }
-
+        .monthly-label { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #444; }
+        .monthly-value { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 800; color: #f0ede6; line-height: 1; }
         .monthly-sub { font-size: 12px; color: #444; margin-top: 2px; }
-
-        .monthly-right {
-          display: flex;
-          flex-direction: column;
-          align-items: flex-end;
-          gap: 3px;
-        }
-
-        .monthly-sessions-val {
-          font-family: 'Syne', sans-serif;
-          font-size: 20px;
-          font-weight: 700;
-          color: #888;
-        }
-
-        .monthly-sessions-label {
-          font-size: 10px;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: #333;
-        }
-
-        .monthly-arrow {
-          font-size: 12px;
-          color: #2a2a2a;
-          margin-top: 6px;
-          transition: color 0.15s;
-        }
+        .monthly-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+        .monthly-sessions-val { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 700; color: #888; }
+        .monthly-sessions-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #333; }
+        .monthly-arrow { font-size: 12px; color: #2a2a2a; margin-top: 6px; transition: color 0.15s; }
         .monthly-card:hover .monthly-arrow { color: #c9a84c; }
 
-        /* Daily stat cards */
-        .stat-card {
-          background: #111;
-          border: 1px solid #1e1e1e;
-          border-radius: 12px;
-          padding: 20px 16px;
-        }
-        .stat-value {
-          font-family: 'Syne', sans-serif;
-          font-size: 26px;
-          font-weight: 800;
-          color: #f0ede6;
-          margin-bottom: 4px;
-        }
-        .stat-name {
-          font-size: 11px;
-          color: #444;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-        }
+        .stat-card { background: #111; border: 1px solid #1e1e1e; border-radius: 12px; padding: 20px 16px; }
+        .stat-value { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; color: #f0ede6; margin-bottom: 4px; }
+        .stat-name { font-size: 11px; color: #444; letter-spacing: 0.08em; text-transform: uppercase; }
 
-        /* Goal bar */
-        .goal-section {
-          background: #111;
-          border: 1px solid #1e1e1e;
-          border-radius: 12px;
-          padding: 20px;
-          margin-bottom: 32px;
-        }
-        .goal-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 12px;
-        }
-        .goal-title {
-          font-size: 12px;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: #555;
-        }
-        .goal-pct {
-          font-family: 'Syne', sans-serif;
-          font-size: 14px;
-          font-weight: 700;
-          color: #c9a84c;
-        }
-        .goal-bar-bg {
-          height: 4px;
-          background: #1e1e1e;
-          border-radius: 2px;
-          overflow: hidden;
-        }
-        .goal-bar-fill {
-          height: 100%;
-          background: #c9a84c;
-          border-radius: 2px;
-          transition: width 0.6s ease;
-        }
+        .goal-section { background: #111; border: 1px solid #1e1e1e; border-radius: 12px; padding: 20px; margin-bottom: 32px; }
+        .goal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .goal-title { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #555; }
+        .goal-pct { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: #c9a84c; }
+        .goal-bar-bg { height: 4px; background: #1e1e1e; border-radius: 2px; overflow: hidden; }
+        .goal-bar-fill { height: 100%; background: #c9a84c; border-radius: 2px; transition: width 0.6s ease; }
         .goal-desc { margin-top: 8px; font-size: 12px; color: #444; }
 
-        /* Timer section */
-        .timer-section {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          margin-bottom: 48px;
-        }
-        .timer-label {
-          font-size: 11px;
-          letter-spacing: 0.2em;
-          text-transform: uppercase;
-          color: #555;
-          margin-bottom: 32px;
-        }
+        /* Note panel */
+        .note-panel { background: #111; border: 1px solid #2a2a2a; border-radius: 14px; padding: 20px; margin-bottom: 20px; animation: slideDown 0.2s ease; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+        .note-panel-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; }
+        .note-panel-title { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: #f0ede6; margin-bottom: 3px; }
+        .note-panel-sub { font-size: 12px; color: #555; }
+        .note-dismiss { background: transparent; border: none; color: #333; font-size: 18px; cursor: pointer; line-height: 1; padding: 0 2px; transition: color 0.15s; }
+        .note-dismiss:hover { color: #888; }
+        .note-textarea { width: 100%; background: #0a0a0a; border: 1px solid #222; border-radius: 8px; padding: 12px 14px; font-size: 13px; font-family: 'DM Sans', sans-serif; color: #f0ede6; outline: none; resize: none; line-height: 1.6; transition: border-color 0.2s; min-height: 80px; }
+        .note-textarea:focus { border-color: #c9a84c; }
+        .note-textarea::placeholder { color: #2a2a2a; }
+        .note-char-count { text-align: right; font-size: 10px; color: #2a2a2a; margin-top: 4px; margin-bottom: 10px; font-family: 'DM Mono', monospace; }
+        .note-char-count.warn { color: #c9a84c; }
+        .note-actions { display: flex; gap: 8px; align-items: center; }
+        .btn-save-note { background: #c9a84c; color: #0a0a0a; border: none; border-radius: 7px; padding: 9px 18px; font-size: 13px; font-weight: 600; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: opacity 0.15s; }
+        .btn-save-note:hover { opacity: 0.88; }
+        .btn-save-note:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-skip-note { background: transparent; border: 1px solid #222; border-radius: 7px; padding: 9px 14px; font-size: 13px; font-family: 'DM Sans', sans-serif; color: #555; cursor: pointer; transition: all 0.15s; }
+        .btn-skip-note:hover { border-color: #444; color: #888; }
+        .note-saved-msg { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #4ade80; margin-left: 4px; }
+
+        /* Timer */
+        .timer-section { display: flex; flex-direction: column; align-items: center; margin-bottom: 48px; }
+        .timer-label { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: #555; margin-bottom: 32px; }
         .ring-wrap { position: relative; margin-bottom: 32px; }
         .ring-svg { transform: rotate(-90deg); }
         .ring-bg { fill: none; stroke: #1a1a1a; stroke-width: 3; }
-        .ring-progress {
-          fill: none;
-          stroke: #c9a84c;
-          stroke-width: 3;
-          stroke-linecap: round;
-          transition: stroke-dashoffset 0.5s ease;
-        }
+        .ring-progress { fill: none; stroke: #c9a84c; stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset 0.5s ease; }
         .ring-running .ring-progress { stroke: #e8b84b; }
-        .timer-center {
-          position: absolute;
-          top: 50%; left: 50%;
-          transform: translate(-50%, -50%);
-          text-align: center;
-        }
-        .timer-digits {
-          font-family: 'DM Mono', monospace;
-          font-size: 42px;
-          font-weight: 500;
-          letter-spacing: -0.02em;
-          line-height: 1;
-          color: #f0ede6;
-        }
+        .timer-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
+        .timer-digits { font-family: 'DM Mono', monospace; font-size: 42px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; color: #f0ede6; }
         .timer-sub { font-size: 11px; color: #444; margin-top: 6px; letter-spacing: 0.08em; }
-
-        /* Tag input */
         .tag-row { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
-        .tag-input {
-          background: #111;
-          border: 1px solid #222;
-          border-radius: 6px;
-          padding: 9px 14px;
-          font-size: 13px;
-          font-family: 'DM Sans', sans-serif;
-          color: #f0ede6;
-          outline: none;
-          width: 180px;
-          transition: border-color 0.2s;
-        }
+        .tag-input { background: #111; border: 1px solid #222; border-radius: 6px; padding: 9px 14px; font-size: 13px; font-family: 'DM Sans', sans-serif; color: #f0ede6; outline: none; width: 180px; transition: border-color 0.2s; }
         .tag-input:focus { border-color: #c9a84c; }
         .tag-input::placeholder { color: #333; }
         .tag-label { font-size: 12px; color: #555; }
-
-        /* CTA buttons */
-        .cta-btn {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 10px;
-          width: 200px;
-          padding: 16px 32px;
-          border-radius: 100px;
-          border: none;
-          font-size: 15px;
-          font-weight: 600;
-          font-family: 'DM Sans', sans-serif;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
+        .cta-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 200px; padding: 16px 32px; border-radius: 100px; border: none; font-size: 15px; font-weight: 600; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.2s; }
         .cta-btn.start { background: #c9a84c; color: #0a0a0a; }
         .cta-btn.start:hover { background: #d4b35e; }
         .cta-btn.stop { background: transparent; border: 2px solid #e06060; color: #e06060; }
         .cta-btn.stop:hover { background: rgba(220,96,96,0.1); }
         .cta-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* Side panel */
-        .side-title {
-          font-family: 'Syne', sans-serif;
-          font-size: 13px;
-          font-weight: 700;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: #555;
-          margin-bottom: 20px;
-        }
+        /* Sidebar */
+        .side-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #555; margin-bottom: 20px; }
+
+        /* Tag filter pills */
+        .filter-section { margin-bottom: 16px; }
+        .filter-label { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #333; margin-bottom: 8px; display: block; }
+        .pills-row { display: flex; flex-wrap: wrap; gap: 6px; }
+        .pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 100px; font-size: 11px; font-family: 'DM Sans', sans-serif; font-weight: 500; border: 1px solid #222; background: transparent; color: #555; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+        .pill:hover { border-color: #444; color: #888; }
+        .pill.active { background: #1e1e1e; border-color: #c9a84c; color: #c9a84c; }
+        .pill-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+        .filter-loading { font-size: 11px; color: #333; padding: 4px 0; font-style: italic; }
+
+        /* History list */
         .history-list { display: flex; flex-direction: column; gap: 10px; }
-        .history-item {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          background: #111;
-          border: 1px solid #1e1e1e;
-          border-radius: 10px;
-          padding: 14px 16px;
-          transition: border-color 0.15s;
-        }
+        .history-item { display: flex; flex-direction: column; background: #111; border: 1px solid #1e1e1e; border-radius: 10px; padding: 14px 16px; transition: border-color 0.15s; position: relative; }
         .history-item:hover { border-color: #2a2a2a; }
-        .history-left { display: flex; flex-direction: column; gap: 3px; }
+        .history-item-top { display: flex; align-items: center; justify-content: space-between; width: 100%; }
         .history-date { font-size: 13px; color: #888; }
-        .history-note { font-size: 11px; color: #444; font-style: italic; }
-        .history-dur {
-          font-family: 'DM Mono', monospace;
-          font-size: 14px;
-          color: #c9a84c;
-          font-weight: 500;
-        }
+        .history-dur { font-family: 'DM Mono', monospace; font-size: 14px; color: #c9a84c; font-weight: 500; }
+
+        /* Tag badge on history row */
+        .session-tag-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 100px; font-size: 10px; font-weight: 500; border: 1px solid #222; color: #555; cursor: pointer; transition: border-color 0.15s; margin-top: 5px; align-self: flex-start; background: transparent; }
+        .session-tag-badge:hover { border-color: #444; color: #888; }
+        .session-tag-badge.filtered { border-color: #c9a84c; color: #c9a84c; }
+        .tag-badge-dot { width: 5px; height: 5px; border-radius: 50%; }
+
+        /* Note row */
+        .history-note-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #1a1a1a; }
+        .history-note-text { font-size: 11px; color: #555; font-style: italic; line-height: 1.5; flex: 1; }
+        .note-action-btns { display: flex; gap: 4px; flex-shrink: 0; opacity: 0; transition: opacity 0.15s; }
+        .history-item:hover .note-action-btns { opacity: 1; }
+        .btn-note-action { background: transparent; border: 1px solid #222; border-radius: 5px; padding: 3px 8px; font-size: 10px; font-family: 'DM Sans', sans-serif; color: #444; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+        .btn-note-action:hover { border-color: #444; color: #888; }
+        .btn-note-action.del:hover { border-color: #e06060; color: #e06060; }
+        .btn-note-action:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* Add note trigger */
+        .btn-add-note { margin-top: 8px; background: transparent; border: 1px dashed #222; border-radius: 5px; padding: 5px 10px; font-size: 11px; font-family: 'DM Sans', sans-serif; color: #333; cursor: pointer; width: 100%; text-align: left; transition: all 0.15s; opacity: 0; }
+        .history-item:hover .btn-add-note { opacity: 1; }
+        .btn-add-note:hover { border-color: #c9a84c; color: #c9a84c; }
+
+        /* Inline edit */
+        .inline-edit-wrap { margin-top: 8px; padding-top: 8px; border-top: 1px solid #1a1a1a; width: 100%; }
+        .inline-edit-textarea { width: 100%; background: #0a0a0a; border: 1px solid #c9a84c; border-radius: 6px; padding: 8px 10px; font-size: 12px; font-family: 'DM Sans', sans-serif; color: #f0ede6; outline: none; resize: none; line-height: 1.5; min-height: 60px; }
+        .inline-edit-actions { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
+        .btn-inline-save { background: #c9a84c; color: #0a0a0a; border: none; border-radius: 5px; padding: 5px 12px; font-size: 11px; font-weight: 600; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: opacity 0.15s; }
+        .btn-inline-save:hover { opacity: 0.88; }
+        .btn-inline-save:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-inline-cancel { background: transparent; border: 1px solid #222; border-radius: 5px; padding: 5px 10px; font-size: 11px; font-family: 'DM Sans', sans-serif; color: #555; cursor: pointer; transition: all 0.15s; }
+        .btn-inline-cancel:hover { border-color: #444; color: #888; }
+        .inline-edit-hint { font-size: 10px; color: #333; margin-left: auto; }
+
         .empty-state { text-align: center; padding: 40px 20px; color: #333; font-size: 14px; }
 
         /* Quick links */
         .quick-links { display: flex; flex-direction: column; gap: 8px; margin-top: 32px; }
-        .quick-link {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          background: #111;
-          border: 1px solid #1e1e1e;
-          border-radius: 10px;
-          padding: 14px 16px;
-          font-size: 14px;
-          color: #888;
-          cursor: pointer;
-          transition: all 0.15s;
-          font-family: 'DM Sans', sans-serif;
-        }
+        .quick-link { display: flex; align-items: center; justify-content: space-between; background: #111; border: 1px solid #1e1e1e; border-radius: 10px; padding: 14px 16px; font-size: 14px; color: #888; cursor: pointer; transition: all 0.15s; font-family: 'DM Sans', sans-serif; }
         .quick-link:hover { border-color: #c9a84c; color: #f0ede6; }
         .quick-link-arrow { color: #333; transition: color 0.15s; }
         .quick-link:hover .quick-link-arrow { color: #c9a84c; }
-
-        /* ── Note panel ── */
-        .note-panel {
-          background: #111;
-          border: 1px solid #2a2a2a;
-          border-radius: 14px;
-          padding: 20px 20px;
-          margin-bottom: 20px;
-          animation: slideDown 0.2s ease;
-        }
-
-        @keyframes slideDown {
-          from { opacity: 0; transform: translateY(-8px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-
-        .note-panel-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          margin-bottom: 14px;
-        }
-
-        .note-panel-title {
-          font-family: 'Syne', sans-serif;
-          font-size: 14px;
-          font-weight: 700;
-          color: #f0ede6;
-          margin-bottom: 3px;
-        }
-
-        .note-panel-sub {
-          font-size: 12px;
-          color: #555;
-        }
-
-        .note-dismiss {
-          background: transparent;
-          border: none;
-          color: #333;
-          font-size: 18px;
-          cursor: pointer;
-          line-height: 1;
-          padding: 0 2px;
-          transition: color 0.15s;
-        }
-        .note-dismiss:hover { color: #888; }
-
-        .note-textarea {
-          width: 100%;
-          background: #0a0a0a;
-          border: 1px solid #222;
-          border-radius: 8px;
-          padding: 12px 14px;
-          font-size: 13px;
-          font-family: 'DM Sans', sans-serif;
-          color: #f0ede6;
-          outline: none;
-          resize: none;
-          line-height: 1.6;
-          transition: border-color 0.2s;
-          min-height: 80px;
-        }
-        .note-textarea:focus { border-color: #c9a84c; }
-        .note-textarea::placeholder { color: #2a2a2a; }
-
-        .note-char-count {
-          text-align: right;
-          font-size: 10px;
-          color: #2a2a2a;
-          margin-top: 4px;
-          margin-bottom: 10px;
-          font-family: 'DM Mono', monospace;
-        }
-        .note-char-count.warn { color: #c9a84c; }
-
-        .note-actions {
-          display: flex;
-          gap: 8px;
-          align-items: center;
-        }
-
-        .btn-save-note {
-          background: #c9a84c;
-          color: #0a0a0a;
-          border: none;
-          border-radius: 7px;
-          padding: 9px 18px;
-          font-size: 13px;
-          font-weight: 600;
-          font-family: 'DM Sans', sans-serif;
-          cursor: pointer;
-          transition: opacity 0.15s;
-        }
-        .btn-save-note:hover { opacity: 0.88; }
-        .btn-save-note:disabled { opacity: 0.4; cursor: not-allowed; }
-
-        .btn-skip-note {
-          background: transparent;
-          border: 1px solid #222;
-          border-radius: 7px;
-          padding: 9px 14px;
-          font-size: 13px;
-          font-family: 'DM Sans', sans-serif;
-          color: #555;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
-        .btn-skip-note:hover { border-color: #444; color: #888; }
-
-        .note-saved-msg {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 12px;
-          color: #4ade80;
-          margin-left: 4px;
-        }
 
         @media (max-width: 900px) {
           .dash-body { grid-template-columns: 1fr; }
@@ -670,24 +465,18 @@ export default function Dashboard() {
       `}</style>
 
       <div className="dash-root">
-        {/* Nav */}
         <nav className="nav">
           <div className="nav-brand">FocusTracker</div>
           <div className="nav-actions">
-            <button className="nav-btn gold" onClick={() => router.push("/Goals")}>
-              Goals
-            </button>
-            <button className="nav-btn" onClick={logout}>
-              Sign out
-            </button>
+            <button className="nav-btn gold" onClick={() => router.push("/Goals")}>Goals</button>
+            <button className="nav-btn" onClick={logout}>Sign out</button>
           </div>
         </nav>
 
         <div className="dash-body">
-          {/* Main */}
           <main className="dash-main">
 
-            {/* Daily stats — 3 cols */}
+            {/* Daily stats */}
             <div className="stats-top">
               <div className="stat-card">
                 <div className="stat-value">{dailyMinutes}</div>
@@ -703,12 +492,8 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Monthly card — full width, clickable → trend page */}
-            <div
-              className="monthly-card"
-              onClick={() => router.push("/Stats/trend")}
-              title="View weekly trend"
-            >
+            {/* Monthly card */}
+            <div className="monthly-card" onClick={() => router.push("/Stats/trend")} title="View weekly trend">
               <div className="monthly-left">
                 <span className="monthly-label">{currentMonthName}</span>
                 <span className="monthly-value">{fmtHours(monthlyMinutes)}</span>
@@ -721,7 +506,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Goal bar */}
+            {/* Daily goal bar */}
             {goalTarget !== null && (
               <div className="goal-section">
                 <div className="goal-header">
@@ -738,7 +523,7 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* ── Note panel — appears after a session stops ── */}
+            {/* Post-session note panel */}
             {stoppedSessionId !== null && (
               <div className="note-panel">
                 <div className="note-panel-header">
@@ -752,9 +537,7 @@ export default function Dashboard() {
                         : "What did you work on?"}
                     </div>
                   </div>
-                  <button className="note-dismiss" onClick={dismissNote} title="Dismiss">
-                    ×
-                  </button>
+                  <button className="note-dismiss" onClick={dismissNote}>×</button>
                 </div>
 
                 {!noteSaved ? (
@@ -771,16 +554,10 @@ export default function Dashboard() {
                       {noteText.length} / 500
                     </div>
                     <div className="note-actions">
-                      <button
-                        className="btn-save-note"
-                        disabled={noteSaving || !noteText.trim()}
-                        onClick={saveNote}
-                      >
+                      <button className="btn-save-note" disabled={noteSaving || !noteText.trim()} onClick={saveNote}>
                         {noteSaving ? "Saving..." : "Save note"}
                       </button>
-                      <button className="btn-skip-note" onClick={dismissNote}>
-                        Skip
-                      </button>
+                      <button className="btn-skip-note" onClick={dismissNote}>Skip</button>
                     </div>
                   </>
                 ) : (
@@ -788,9 +565,7 @@ export default function Dashboard() {
                     <span className="note-saved-msg">
                       ✓ &ldquo;{noteText.length > 60 ? noteText.slice(0, 60) + "…" : noteText}&rdquo;
                     </span>
-                    <button className="btn-skip-note" onClick={dismissNote}>
-                      Dismiss
-                    </button>
+                    <button className="btn-skip-note" onClick={dismissNote}>Dismiss</button>
                   </div>
                 )}
               </div>
@@ -846,17 +621,108 @@ export default function Dashboard() {
           <aside className="dash-side">
             <div className="side-title">Recent sessions</div>
 
-            {history.length === 0 ? (
-              <div className="empty-state">No sessions yet. Start your first focus block.</div>
+            {/* Tag filter pills */}
+            {availableTags.length > 0 && (
+              <div className="filter-section">
+                <span className="filter-label">Filter by tag</span>
+                <div className="pills-row">
+                  <button
+                    className={`pill ${activeFilter === null ? "active" : ""}`}
+                    onClick={() => filterByTag(null)}
+                  >
+                    All
+                  </button>
+                  {availableTags.map((t) => (
+                    <button
+                      key={t.id}
+                      className={`pill ${activeFilter === t.name ? "active" : ""}`}
+                      onClick={() => filterByTag(t.name)}
+                    >
+                      {t.color && <span className="pill-dot" style={{ background: t.color }} />}
+                      {t.name}
+                    </button>
+                  ))}
+                </div>
+                {filterLoading && <div className="filter-loading">Loading...</div>}
+              </div>
+            )}
+
+            {/* Session list */}
+            {filteredHistory.length === 0 && !filterLoading ? (
+              <div className="empty-state">
+                {activeFilter
+                  ? `No sessions tagged "${activeFilter}"`
+                  : "No sessions yet. Start your first focus block."}
+              </div>
             ) : (
               <div className="history-list">
-                {history.map((h) => (
+                {filteredHistory.map((h) => (
                   <div key={h.id} className="history-item">
-                    <div className="history-left">
+
+                    {/* Date + duration */}
+                    <div className="history-item-top">
                       <span className="history-date">{formatDate(h.startTime)}</span>
-                      {h.note && <span className="history-note">{h.note}</span>}
+                      <span className="history-dur">{h.duration} min</span>
                     </div>
-                    <span className="history-dur">{h.duration} min</span>
+
+                    {/* Tag badge */}
+                    {h.tag && (
+                      <button
+                        className={`session-tag-badge ${activeFilter === h.tag.name ? "filtered" : ""}`}
+                        onClick={() => filterByTag(activeFilter === h.tag!.name ? null : h.tag!.name)}
+                        title={activeFilter === h.tag.name ? "Clear filter" : `Filter by ${h.tag.name}`}
+                      >
+                        {h.tag.color && (
+                          <span className="tag-badge-dot" style={{ background: h.tag.color }} />
+                        )}
+                        {h.tag.name}
+                      </button>
+                    )}
+
+                    {/* Inline note editor */}
+                    {editingId === h.id ? (
+                      <div className="inline-edit-wrap">
+                        <textarea
+                          className="inline-edit-textarea"
+                          value={editDraft}
+                          maxLength={500}
+                          autoFocus
+                          onChange={(e) => setEditDraft(e.target.value)}
+                          placeholder="What did you work on? (leave empty to delete)"
+                        />
+                        <div className="inline-edit-actions">
+                          <button className="btn-inline-save" disabled={editSaving} onClick={() => saveEditedNote(h.id)}>
+                            {editSaving ? "Saving..." : "Save"}
+                          </button>
+                          <button className="btn-inline-cancel" onClick={() => { setEditingId(null); setEditDraft(""); }}>
+                            Cancel
+                          </button>
+                          <span className="inline-edit-hint">
+                            {editDraft.length}/500
+                            {editDraft.trim() === "" && h.note ? " · will delete note" : ""}
+                          </span>
+                        </div>
+                      </div>
+                    ) : h.note ? (
+                      <div className="history-note-row">
+                        <span className="history-note-text">{h.note}</span>
+                        <div className="note-action-btns">
+                          <button className="btn-note-action" onClick={() => openEdit(h)}>Edit</button>
+                          <button
+                            className="btn-note-action del"
+                            disabled={deletingId === h.id}
+                            onClick={() => deleteNote(h.id)}
+                          >
+                            {deletingId === h.id ? "..." : "Delete"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button className="btn-add-note" onClick={() => openEdit(h)}>
+                        + Add note
+                      </button>
+                    )}
+
                   </div>
                 ))}
               </div>
