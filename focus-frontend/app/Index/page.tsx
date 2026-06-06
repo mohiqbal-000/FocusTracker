@@ -1,7 +1,12 @@
 "use client";
 
+import NavBar from "../components/NavBar";
+
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "../hooks/useAuth";
+import { api } from "../lib/api";
+
 
 type FocusSession = {
   id: number;
@@ -18,13 +23,9 @@ type Tag = {
   color: string | null;
 };
 
-const API = "http://localhost:8080/api";
-
 export default function Dashboard() {
-  const router = useRouter();
+  const { token, userId: authUserId, ready } = useAuth();
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  const [token, setToken] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -63,13 +64,6 @@ export default function Dashboard() {
   const [editSaving, setEditSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  /* Load JWT */
-  useEffect(() => {
-    const t = localStorage.getItem("token");
-    if (!t) router.push("/login");
-    else setToken(t);
-  }, [router]);
-
   /* Timer */
   useEffect(() => {
     if (!startTime) return;
@@ -81,14 +75,13 @@ export default function Dashboard() {
 
   /* Refresh all stats */
   const refreshStats = async (t: string) => {
-    const h = { Authorization: `Bearer ${t}` };
     try {
       const [daily, streak, hist, monthly, tags] = await Promise.all([
-        fetch(`${API}/focus/stats/daily`,   { headers: h }).then(r => r.json()),
-        fetch(`${API}/focus/stats/streak`,  { headers: h }).then(r => r.json()),
-        fetch(`${API}/focus/history`,       { headers: h }).then(r => r.json()),
-        fetch(`${API}/focus/stats/monthly`, { headers: h }).then(r => r.json()),
-        fetch(`${API}/tags`,                { headers: h }).then(r => r.ok ? r.json() : []),
+        api.get<any>("/focus/stats/daily",   t),
+        api.get<any>("/focus/stats/streak",  t),
+        api.get<any>("/focus/history",       t),
+        api.get<any>("/focus/stats/monthly", t),
+        api.get<any>("/tags",                t).catch(() => []),
       ]);
 
       setDailyMinutes(daily.totalMinutes ?? 0);
@@ -114,8 +107,8 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    if (token) refreshStats(token);
-  }, [token]);
+    if (ready && token) refreshStats(token);
+  }, [ready, token]);
 
   /* Filter history by tag */
   const filterByTag = async (tagName: string | null) => {
@@ -123,12 +116,10 @@ export default function Dashboard() {
     setActiveFilter(tagName);
     setFilterLoading(true);
     try {
-      const url = tagName
-        ? `${API}/focus/history?tag=${encodeURIComponent(tagName)}`
-        : `${API}/focus/history`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) throw new Error("Failed to filter");
-      const data = await res.json();
+      const path = tagName
+        ? `/focus/history?tag=${encodeURIComponent(tagName)}`
+        : "/focus/history";
+      const data = await api.get<FocusSession[]>(path, token);
       setFilteredHistory(Array.isArray(data) ? data.slice(0, 20) : []);
     } catch (e) {
       console.error(e);
@@ -142,14 +133,10 @@ export default function Dashboard() {
     if (!token) return;
     setLoading(true);
     try {
-      const url = tag.trim()
-        ? `${API}/focus/start?tag=${encodeURIComponent(tag.trim())}`
-        : `${API}/focus/start`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
+      const path = tag.trim()
+        ? `/focus/start?tag=${encodeURIComponent(tag.trim())}`
+        : "/focus/start";
+      const data = await api.post<any>(path, token);
       setSessionId(data.id);
       setStartTime(Date.now());
       setElapsedSeconds(0);
@@ -165,10 +152,7 @@ export default function Dashboard() {
     if (!token || !sessionId) return;
     setLoading(true);
     try {
-      await fetch(`${API}/focus/stop/${sessionId}`, {
-        method: "PUT",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await api.put(`/focus/stop/${sessionId}`, token);
       setStoppedSessionId(sessionId);
       setStoppedDuration(Math.floor(elapsedSeconds / 60));
       setNoteText("");
@@ -190,12 +174,7 @@ export default function Dashboard() {
     if (!token || !stoppedSessionId || !noteText.trim()) return;
     setNoteSaving(true);
     try {
-      const res = await fetch(`${API}/focus/${stoppedSessionId}/note`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ note: noteText.trim() }),
-      });
-      if (!res.ok) throw new Error("Failed to save note");
+      await api.put(`/focus/${stoppedSessionId}/note`, token, { note: noteText.trim() });
       setNoteSaved(true);
       const updater = (prev: FocusSession[]) =>
         prev.map((h) => h.id === stoppedSessionId ? { ...h, note: noteText.trim() } : h);
@@ -226,22 +205,13 @@ export default function Dashboard() {
     setEditSaving(true);
     try {
       if (editDraft.trim() === "") {
-        const res = await fetch(`${API}/focus/${sid}/note`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error("Failed to delete note");
+        await api.del(`/focus/${sid}/note`, token);
         const updater = (prev: FocusSession[]) =>
           prev.map((h) => h.id === sid ? { ...h, note: undefined } : h);
         setHistory(updater);
         setFilteredHistory(updater);
       } else {
-        const res = await fetch(`${API}/focus/${sid}/note`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ note: editDraft.trim() }),
-        });
-        if (!res.ok) throw new Error("Failed to save note");
+        await api.put(`/focus/${sid}/note`, token, { note: editDraft.trim() });
         const updater = (prev: FocusSession[]) =>
           prev.map((h) => h.id === sid ? { ...h, note: editDraft.trim() } : h);
         setHistory(updater);
@@ -261,11 +231,7 @@ export default function Dashboard() {
     if (!token) return;
     setDeletingId(sid);
     try {
-      const res = await fetch(`${API}/focus/${sid}/note`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error("Failed to delete note");
+      await api.del(`/focus/${sid}/note`, token);
       const updater = (prev: FocusSession[]) =>
         prev.map((h) => h.id === sid ? { ...h, note: undefined } : h);
       setHistory(updater);
@@ -275,12 +241,6 @@ export default function Dashboard() {
     } finally {
       setDeletingId(null);
     }
-  };
-
-  const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("userId");
-    router.push("/login");
   };
 
   const formatTime = (s: number) =>
@@ -298,6 +258,8 @@ export default function Dashboard() {
     return `${h}h ${min}m`;
   };
 
+  if (!ready) return null;
+
   const currentMonthName = new Date().toLocaleString("en-US", { month: "long" });
   const isRunning = !!sessionId;
   const ringPct = Math.min(100, (elapsedSeconds / (25 * 60)) * 100);
@@ -311,13 +273,6 @@ export default function Dashboard() {
 
         .dash-root { min-height: 100vh; background: #0a0a0a; color: #f0ede6; font-family: 'DM Sans', sans-serif; display: flex; flex-direction: column; }
 
-        .nav { display: flex; align-items: center; justify-content: space-between; padding: 20px 40px; border-bottom: 1px solid #181818; }
-        .nav-brand { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; color: #c9a84c; }
-        .nav-actions { display: flex; gap: 12px; align-items: center; }
-        .nav-btn { background: transparent; border: 1px solid #222; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-family: 'DM Sans', sans-serif; color: #888; cursor: pointer; transition: all 0.15s; }
-        .nav-btn:hover { border-color: #444; color: #f0ede6; }
-        .nav-btn.gold { border-color: #c9a84c; color: #c9a84c; }
-        .nav-btn.gold:hover { background: #c9a84c; color: #0a0a0a; }
 
         .dash-body { flex: 1; display: grid; grid-template-columns: 1fr 380px; }
         .dash-main { padding: 48px 40px; border-right: 1px solid #181818; }
@@ -459,19 +414,12 @@ export default function Dashboard() {
           .dash-body { grid-template-columns: 1fr; }
           .dash-main { border-right: none; border-bottom: 1px solid #181818; padding: 32px 24px; }
           .dash-side { padding: 32px 24px; }
-          .nav { padding: 16px 24px; }
           .stats-top { grid-template-columns: repeat(3, 1fr); }
         }
       `}</style>
 
       <div className="dash-root">
-        <nav className="nav">
-          <div className="nav-brand">FocusTracker</div>
-          <div className="nav-actions">
-            <button className="nav-btn gold" onClick={() => router.push("/Goals")}>Goals</button>
-            <button className="nav-btn" onClick={logout}>Sign out</button>
-          </div>
-        </nav>
+        <NavBar />
 
         <div className="dash-body">
           <main className="dash-main">

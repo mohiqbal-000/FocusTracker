@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import NavBar from "../../components/NavBar";
+
 
 const API = "http://localhost:8080/api";
 
@@ -463,12 +465,9 @@ export default function BestHoursPage() {
       `}</style>
 
       <div className="bh-root">
-        <nav className="nav">
-          <div className="nav-brand">FocusTracker</div>
-          <button className="nav-back" onClick={() => router.push("/Index")}>
-            ← Dashboard
-          </button>
-        </nav>
+        <NavBar />
+        
+        
 
         <div className="bh-body">
           {loading && <div className="loading-wrap">Analysing your focus patterns...</div>}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import NavBar from "../components/NavBar";
 
 type GoalResponse = {
   id: number;
@@ -386,12 +387,9 @@ export default function GoalsPage() {
       `}</style>
 
       <div className="goals-root">
-        <nav className="nav">
-          <div className="nav-brand">FocusTracker</div>
-          <button className="nav-back" onClick={() => router.push("/Index")}>
-            ← Dashboard
-          </button>
-        </nav>
+        <NavBar />
+         
+        
 
         <div className="goals-body">
 
