@@ -1,12 +1,10 @@
 "use client";
 
 import NavBar from "../components/NavBar";
-
+import { useAuth } from "../hooks/useAuth";
+import { api }     from "../lib/api";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "../hooks/useAuth";
-import { api } from "../lib/api";
-
 
 type FocusSession = {
   id: number;
@@ -24,24 +22,22 @@ type Tag = {
 };
 
 export default function Dashboard() {
-  const { token, userId: authUserId, ready } = useAuth();
+  const { token, ready } = useAuth();
+  const router = useRouter();
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  // Daily stats
   const [dailyMinutes, setDailyMinutes] = useState(0);
   const [dailySessions, setDailySessions] = useState(0);
   const [streakDays, setStreakDays] = useState(0);
   const [goalTarget, setGoalTarget] = useState<number | null>(null);
   const [goalProgress, setGoalProgress] = useState(0);
 
-  // Monthly stats
   const [monthlyMinutes, setMonthlyMinutes] = useState(0);
   const [monthlySessions, setMonthlySessions] = useState(0);
 
-  // History + tag state
   const [history, setHistory] = useState<FocusSession[]>([]);
   const [filteredHistory, setFilteredHistory] = useState<FocusSession[]>([]);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
@@ -51,20 +47,17 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [tag, setTag] = useState("");
 
-  // Post-session note panel
   const [stoppedSessionId, setStoppedSessionId] = useState<number | null>(null);
   const [stoppedDuration, setStoppedDuration] = useState(0);
   const [noteText, setNoteText] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteSaved, setNoteSaved] = useState(false);
 
-  // History row inline edit/delete
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  /* Timer */
   useEffect(() => {
     if (!startTime) return;
     intervalRef.current = setInterval(() => {
@@ -73,7 +66,6 @@ export default function Dashboard() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [startTime]);
 
-  /* Refresh all stats */
   const refreshStats = async (t: string) => {
     try {
       const [daily, streak, hist, monthly, tags] = await Promise.all([
@@ -83,23 +75,18 @@ export default function Dashboard() {
         api.get<any>("/focus/stats/monthly", t),
         api.get<any>("/tags",                t).catch(() => []),
       ]);
-
       setDailyMinutes(daily.totalMinutes ?? 0);
       setDailySessions(daily.totalSessions ?? 0);
       if (daily.goalSet) {
         setGoalTarget(daily.targetMinutes);
         setGoalProgress(daily.progressPercent ?? 0);
       }
-
       setStreakDays(streak.streakDays ?? streak.streak ?? 0);
-
       const histList = Array.isArray(hist) ? hist.slice(0, 8) : [];
       setHistory(histList);
       setFilteredHistory(histList);
-
       setMonthlyMinutes(monthly.totalMinutes ?? 0);
       setMonthlySessions(monthly.totalSessions ?? 0);
-
       setAvailableTags(Array.isArray(tags) ? tags : []);
     } catch (e) {
       console.error("Stats error", e);
@@ -110,7 +97,6 @@ export default function Dashboard() {
     if (ready && token) refreshStats(token);
   }, [ready, token]);
 
-  /* Filter history by tag */
   const filterByTag = async (tagName: string | null) => {
     if (!token) return;
     setActiveFilter(tagName);
@@ -128,7 +114,6 @@ export default function Dashboard() {
     }
   };
 
-  /* Start session */
   const startSession = async () => {
     if (!token) return;
     setLoading(true);
@@ -147,7 +132,6 @@ export default function Dashboard() {
     }
   };
 
-  /* Stop session */
   const stopSession = async () => {
     if (!token || !sessionId) return;
     setLoading(true);
@@ -169,7 +153,6 @@ export default function Dashboard() {
     }
   };
 
-  /* Save post-session note */
   const saveNote = async () => {
     if (!token || !stoppedSessionId || !noteText.trim()) return;
     setNoteSaving(true);
@@ -193,13 +176,11 @@ export default function Dashboard() {
     setNoteSaved(false);
   };
 
-  /* Open inline editor for history row */
   const openEdit = (session: FocusSession) => {
     setEditingId(session.id);
     setEditDraft(session.note ?? "");
   };
 
-  /* Save edited note */
   const saveEditedNote = async (sid: number) => {
     if (!token) return;
     setEditSaving(true);
@@ -226,7 +207,6 @@ export default function Dashboard() {
     }
   };
 
-  /* Delete note */
   const deleteNote = async (sid: number) => {
     if (!token) return;
     setDeletingId(sid);
@@ -270,16 +250,11 @@ export default function Dashboard() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
         .dash-root { min-height: 100vh; background: #0a0a0a; color: #f0ede6; font-family: 'DM Sans', sans-serif; display: flex; flex-direction: column; }
-
-
         .dash-body { flex: 1; display: grid; grid-template-columns: 1fr 380px; }
         .dash-main { padding: 48px 40px; border-right: 1px solid #181818; }
         .dash-side { padding: 48px 32px; }
-
         .stats-top { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 12px; }
-
         .monthly-card { background: #111; border: 1px solid #1e1e1e; border-radius: 12px; padding: 18px 20px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; transition: border-color 0.15s; cursor: pointer; }
         .monthly-card:hover { border-color: #2a2a2a; }
         .monthly-left { display: flex; flex-direction: column; gap: 3px; }
@@ -291,11 +266,9 @@ export default function Dashboard() {
         .monthly-sessions-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #333; }
         .monthly-arrow { font-size: 12px; color: #2a2a2a; margin-top: 6px; transition: color 0.15s; }
         .monthly-card:hover .monthly-arrow { color: #c9a84c; }
-
         .stat-card { background: #111; border: 1px solid #1e1e1e; border-radius: 12px; padding: 20px 16px; }
         .stat-value { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; color: #f0ede6; margin-bottom: 4px; }
         .stat-name { font-size: 11px; color: #444; letter-spacing: 0.08em; text-transform: uppercase; }
-
         .goal-section { background: #111; border: 1px solid #1e1e1e; border-radius: 12px; padding: 20px; margin-bottom: 32px; }
         .goal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
         .goal-title { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #555; }
@@ -303,8 +276,6 @@ export default function Dashboard() {
         .goal-bar-bg { height: 4px; background: #1e1e1e; border-radius: 2px; overflow: hidden; }
         .goal-bar-fill { height: 100%; background: #c9a84c; border-radius: 2px; transition: width 0.6s ease; }
         .goal-desc { margin-top: 8px; font-size: 12px; color: #444; }
-
-        /* Note panel */
         .note-panel { background: #111; border: 1px solid #2a2a2a; border-radius: 14px; padding: 20px; margin-bottom: 20px; animation: slideDown 0.2s ease; }
         @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
         .note-panel-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; }
@@ -324,8 +295,6 @@ export default function Dashboard() {
         .btn-skip-note { background: transparent; border: 1px solid #222; border-radius: 7px; padding: 9px 14px; font-size: 13px; font-family: 'DM Sans', sans-serif; color: #555; cursor: pointer; transition: all 0.15s; }
         .btn-skip-note:hover { border-color: #444; color: #888; }
         .note-saved-msg { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #4ade80; margin-left: 4px; }
-
-        /* Timer */
         .timer-section { display: flex; flex-direction: column; align-items: center; margin-bottom: 48px; }
         .timer-label { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: #555; margin-bottom: 32px; }
         .ring-wrap { position: relative; margin-bottom: 32px; }
@@ -347,11 +316,7 @@ export default function Dashboard() {
         .cta-btn.stop { background: transparent; border: 2px solid #e06060; color: #e06060; }
         .cta-btn.stop:hover { background: rgba(220,96,96,0.1); }
         .cta-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        /* Sidebar */
         .side-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #555; margin-bottom: 20px; }
-
-        /* Tag filter pills */
         .filter-section { margin-bottom: 16px; }
         .filter-label { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #333; margin-bottom: 8px; display: block; }
         .pills-row { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -360,22 +325,16 @@ export default function Dashboard() {
         .pill.active { background: #1e1e1e; border-color: #c9a84c; color: #c9a84c; }
         .pill-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
         .filter-loading { font-size: 11px; color: #333; padding: 4px 0; font-style: italic; }
-
-        /* History list */
         .history-list { display: flex; flex-direction: column; gap: 10px; }
         .history-item { display: flex; flex-direction: column; background: #111; border: 1px solid #1e1e1e; border-radius: 10px; padding: 14px 16px; transition: border-color 0.15s; position: relative; }
         .history-item:hover { border-color: #2a2a2a; }
         .history-item-top { display: flex; align-items: center; justify-content: space-between; width: 100%; }
         .history-date { font-size: 13px; color: #888; }
         .history-dur { font-family: 'DM Mono', monospace; font-size: 14px; color: #c9a84c; font-weight: 500; }
-
-        /* Tag badge on history row */
         .session-tag-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 100px; font-size: 10px; font-weight: 500; border: 1px solid #222; color: #555; cursor: pointer; transition: border-color 0.15s; margin-top: 5px; align-self: flex-start; background: transparent; }
         .session-tag-badge:hover { border-color: #444; color: #888; }
         .session-tag-badge.filtered { border-color: #c9a84c; color: #c9a84c; }
         .tag-badge-dot { width: 5px; height: 5px; border-radius: 50%; }
-
-        /* Note row */
         .history-note-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #1a1a1a; }
         .history-note-text { font-size: 11px; color: #555; font-style: italic; line-height: 1.5; flex: 1; }
         .note-action-btns { display: flex; gap: 4px; flex-shrink: 0; opacity: 0; transition: opacity 0.15s; }
@@ -384,13 +343,9 @@ export default function Dashboard() {
         .btn-note-action:hover { border-color: #444; color: #888; }
         .btn-note-action.del:hover { border-color: #e06060; color: #e06060; }
         .btn-note-action:disabled { opacity: 0.4; cursor: not-allowed; }
-
-        /* Add note trigger */
         .btn-add-note { margin-top: 8px; background: transparent; border: 1px dashed #222; border-radius: 5px; padding: 5px 10px; font-size: 11px; font-family: 'DM Sans', sans-serif; color: #333; cursor: pointer; width: 100%; text-align: left; transition: all 0.15s; opacity: 0; }
         .history-item:hover .btn-add-note { opacity: 1; }
         .btn-add-note:hover { border-color: #c9a84c; color: #c9a84c; }
-
-        /* Inline edit */
         .inline-edit-wrap { margin-top: 8px; padding-top: 8px; border-top: 1px solid #1a1a1a; width: 100%; }
         .inline-edit-textarea { width: 100%; background: #0a0a0a; border: 1px solid #c9a84c; border-radius: 6px; padding: 8px 10px; font-size: 12px; font-family: 'DM Sans', sans-serif; color: #f0ede6; outline: none; resize: none; line-height: 1.5; min-height: 60px; }
         .inline-edit-actions { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
@@ -400,16 +355,12 @@ export default function Dashboard() {
         .btn-inline-cancel { background: transparent; border: 1px solid #222; border-radius: 5px; padding: 5px 10px; font-size: 11px; font-family: 'DM Sans', sans-serif; color: #555; cursor: pointer; transition: all 0.15s; }
         .btn-inline-cancel:hover { border-color: #444; color: #888; }
         .inline-edit-hint { font-size: 10px; color: #333; margin-left: auto; }
-
         .empty-state { text-align: center; padding: 40px 20px; color: #333; font-size: 14px; }
-
-        /* Quick links */
         .quick-links { display: flex; flex-direction: column; gap: 8px; margin-top: 32px; }
         .quick-link { display: flex; align-items: center; justify-content: space-between; background: #111; border: 1px solid #1e1e1e; border-radius: 10px; padding: 14px 16px; font-size: 14px; color: #888; cursor: pointer; transition: all 0.15s; font-family: 'DM Sans', sans-serif; }
         .quick-link:hover { border-color: #c9a84c; color: #f0ede6; }
         .quick-link-arrow { color: #333; transition: color 0.15s; }
         .quick-link:hover .quick-link-arrow { color: #c9a84c; }
-
         @media (max-width: 900px) {
           .dash-body { grid-template-columns: 1fr; }
           .dash-main { border-right: none; border-bottom: 1px solid #181818; padding: 32px 24px; }
@@ -423,8 +374,6 @@ export default function Dashboard() {
 
         <div className="dash-body">
           <main className="dash-main">
-
-            {/* Daily stats */}
             <div className="stats-top">
               <div className="stat-card">
                 <div className="stat-value">{dailyMinutes}</div>
@@ -440,7 +389,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Monthly card */}
             <div className="monthly-card" onClick={() => router.push("/Stats/trend")} title="View weekly trend">
               <div className="monthly-left">
                 <span className="monthly-label">{currentMonthName}</span>
@@ -454,7 +402,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Daily goal bar */}
             {goalTarget !== null && (
               <div className="goal-section">
                 <div className="goal-header">
@@ -471,7 +418,6 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Post-session note panel */}
             {stoppedSessionId !== null && (
               <div className="note-panel">
                 <div className="note-panel-header">
@@ -487,7 +433,6 @@ export default function Dashboard() {
                   </div>
                   <button className="note-dismiss" onClick={dismissNote}>×</button>
                 </div>
-
                 {!noteSaved ? (
                   <>
                     <textarea
@@ -519,12 +464,10 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Timer */}
             <div className="timer-section">
               <div className="timer-label">
                 {isRunning ? "Session in progress" : "Ready to focus"}
               </div>
-
               <div className={`ring-wrap ${isRunning ? "ring-running" : ""}`}>
                 <svg className="ring-svg" width="200" height="200" viewBox="0 0 200 200">
                   <circle className="ring-bg" cx="100" cy="100" r="88" />
@@ -540,7 +483,6 @@ export default function Dashboard() {
                   <div className="timer-sub">{isRunning ? "elapsed" : "mm:ss"}</div>
                 </div>
               </div>
-
               {!isRunning && (
                 <div className="tag-row">
                   <span className="tag-label">Tag</span>
@@ -552,7 +494,6 @@ export default function Dashboard() {
                   />
                 </div>
               )}
-
               {!isRunning ? (
                 <button className="cta-btn start" onClick={startSession} disabled={loading}>
                   {loading ? "Starting..." : "▶ Start focus"}
@@ -565,11 +506,9 @@ export default function Dashboard() {
             </div>
           </main>
 
-          {/* Sidebar */}
           <aside className="dash-side">
             <div className="side-title">Recent sessions</div>
 
-            {/* Tag filter pills */}
             {availableTags.length > 0 && (
               <div className="filter-section">
                 <span className="filter-label">Filter by tag</span>
@@ -595,7 +534,6 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Session list */}
             {filteredHistory.length === 0 && !filterLoading ? (
               <div className="empty-state">
                 {activeFilter
@@ -606,14 +544,10 @@ export default function Dashboard() {
               <div className="history-list">
                 {filteredHistory.map((h) => (
                   <div key={h.id} className="history-item">
-
-                    {/* Date + duration */}
                     <div className="history-item-top">
                       <span className="history-date">{formatDate(h.startTime)}</span>
                       <span className="history-dur">{h.duration} min</span>
                     </div>
-
-                    {/* Tag badge */}
                     {h.tag && (
                       <button
                         className={`session-tag-badge ${activeFilter === h.tag.name ? "filtered" : ""}`}
@@ -626,8 +560,6 @@ export default function Dashboard() {
                         {h.tag.name}
                       </button>
                     )}
-
-                    {/* Inline note editor */}
                     {editingId === h.id ? (
                       <div className="inline-edit-wrap">
                         <textarea
@@ -670,7 +602,6 @@ export default function Dashboard() {
                         + Add note
                       </button>
                     )}
-
                   </div>
                 ))}
               </div>
