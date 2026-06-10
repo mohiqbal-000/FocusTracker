@@ -4,6 +4,7 @@ import NavBar from "../components/NavBar";
 import { useAuth } from "../hooks/useAuth";
 import { api }     from "../lib/api";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type Profile = {
   id: number;
@@ -32,6 +33,8 @@ const TIMEZONES = [
 ];
 
 export default function ProfilePage() {
+  const router = useRouter();
+
   const { token, ready } = useAuth();
 
   const [profile, setProfile]       = useState<Profile | null>(null);
@@ -400,6 +403,19 @@ export default function ProfilePage() {
                 heatmap all use your local date. Without the correct timezone, a session at
                 11 PM may count toward the wrong day, breaking your streak.
               </div>
+              <div
+  style={{ background:"#111", border:"1px solid #1e1e1e", borderRadius:12,
+           padding:"16px 20px", cursor:"pointer", marginTop:12 }}
+  onClick={() => router.push("/Profile/daily-goal")}
+>
+  <div style={{ fontSize:14, color:"#888" }}>
+    🎯 Daily goal settings
+    <span style={{ float:"right", color:"#333" }}>→</span>
+  </div>
+  <div style={{ fontSize:12, color:"#333", marginTop:4 }}>
+    Set a daily focus target for the dashboard progress bar
+  </div>
+</div>
             </>
           )}
         </div>
