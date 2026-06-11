@@ -404,6 +404,19 @@ export default function ProfilePage() {
                 11 PM may count toward the wrong day, breaking your streak.
               </div>
               <div
+        style={{ background:"#111", border:"1px solid #1e1e1e", borderRadius:12,
+             padding:"16px 20px", cursor:"pointer", marginTop:12 }}
+      onClick={() => router.push("/Profile/password")}
+    >
+      <div style={{ fontSize:14, color:"#888" }}>
+          🔒 Change password
+        <span style={{ float:"right", color:"#333" }}>→</span>
+      </div>
+        <div style={{ fontSize:12, color:"#333", marginTop:4 }}>
+          Update your account password
+  </div>
+</div>
+              <div
   style={{ background:"#111", border:"1px solid #1e1e1e", borderRadius:12,
            padding:"16px 20px", cursor:"pointer", marginTop:12 }}
   onClick={() => router.push("/Profile/daily-goal")}

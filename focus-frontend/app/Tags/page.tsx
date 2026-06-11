@@ -4,6 +4,7 @@ import NavBar from "../components/NavBar";
 import { useAuth } from "../hooks/useAuth";
 import { api }     from "../lib/api";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type Tag = {
   id: number;
@@ -27,7 +28,7 @@ const COLOR_PALETTE = [
 
 export default function TagsPage() {
   const { token, ready } = useAuth();
-
+  const router = useRouter();
   const [tags, setTags]           = useState<Tag[]>([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState("");
@@ -416,6 +417,13 @@ export default function TagsPage() {
                   ))}
                 </div>
               )}
+              <button
+      className="btn-goto-tags"
+      style={{ width: "100%", marginBottom: 12, textAlign: "left", padding: "14px 18px" }}
+            onClick={() => router.push("/Tags/stats")}
+      >
+    <span>📊 View tag stats breakdown →</span>
+  </button>
 
               <div className="hint-card">
                 <strong>How tags work:</strong> Start a focus session with a tag using the
