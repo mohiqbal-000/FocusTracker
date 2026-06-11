@@ -1,6 +1,7 @@
 package com.example.FocusTrackerBackend.Controller;
 
 import com.example.FocusTrackerBackend.Dto.UserResponseDto;
+import com.example.FocusTrackerBackend.Security.CustomUserDetails;
 import com.example.FocusTrackerBackend.Security.JwtService;
 import com.example.FocusTrackerBackend.Service.UserService;
 import com.example.FocusTrackerBackend.model.User;
@@ -8,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.*;
 
@@ -53,4 +55,32 @@ public class UserController {
             return ResponseEntity.status(401).body("Invalid Email and Password");
         }
     }
+
+    // ── Change password ───────────────────────────────────────────────────────
+    @PutMapping("/password")
+    public ResponseEntity<?> changePassword(
+            @RequestBody Map<String, String> body,
+            Authentication authentication) {
+        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        Long userId = userDetails.getId();
+
+        String currentPassword = body.get("currentPassword");
+        String newPassword     = body.get("newPassword");
+
+        if (currentPassword == null || currentPassword.isBlank()) {
+            return ResponseEntity.badRequest().body("currentPassword is required");
+        }
+        if (newPassword == null || newPassword.length() < 8) {
+            return ResponseEntity.badRequest().body("newPassword must be at least 8 characters");
+        }
+
+        try {
+            userService.changePassword(userId, currentPassword, newPassword);
+            return ResponseEntity.ok().build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(401).body(e.getMessage());
+        }
+    }
+
+    
 }
