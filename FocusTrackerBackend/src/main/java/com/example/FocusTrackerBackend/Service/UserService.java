@@ -31,4 +31,15 @@ public class UserService {
     public User findByEmail(String email) {
         return repo.findByEmail(email);
     }
+    public void changePassword(Long userId, String currentPassword, String newPassword) {
+        User user = repo.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new RuntimeException("Current password is incorrect");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        repo.save(user);
+    }
 }
