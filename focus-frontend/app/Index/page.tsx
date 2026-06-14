@@ -4,6 +4,7 @@ import NavBar from "../components/NavBar";
 import { useAuth } from "../hooks/useAuth";
 import { api }     from "../lib/api";
 import { useEffect, useRef, useState } from "react";
+import { SessionDetailModal } from "../components/SessionDetailModal";
 import { useRouter } from "next/navigation";
 
 type FocusSession = {
@@ -50,6 +51,7 @@ export default function Dashboard() {
 
   const [loading, setLoading] = useState(false);
   const [tag, setTag] = useState("");
+  const [openSessionId, setOpenSessionId] = useState<number | null>(null);
 
   const [stoppedSessionId, setStoppedSessionId] = useState<number | null>(null);
   const [stoppedDuration, setStoppedDuration] = useState(0);
@@ -392,6 +394,20 @@ export default function Dashboard() {
       <div className="dash-root">
         <NavBar />
 
+        {/* Session detail modal */}
+        {openSessionId !== null && (
+          <SessionDetailModal
+            sessionId={openSessionId}
+            onClose={() => setOpenSessionId(null)}
+            onNoteUpdated={(id, note) => {
+              const updater = (prev: FocusSession[]) =>
+                prev.map((h) => h.id === id ? { ...h, note } : h);
+              setHistory(updater);
+              setFilteredHistory(updater);
+            }}
+          />
+        )}
+
         <div className="dash-body">
           <main className="dash-main">
             <div className="stats-top">
@@ -581,7 +597,12 @@ export default function Dashboard() {
               <div className="history-list">
                 {filteredHistory.map((h) => (
                   <div key={h.id} className="history-item">
-                    <div className="history-item-top">
+                    <div
+                      className="history-item-top"
+                      style={{ cursor: "pointer" }}
+                      onClick={() => setOpenSessionId(h.id)}
+                      title="View session details"
+                    >
                       <span className="history-date">{formatDate(h.startTime)}</span>
                       <span className="history-dur">{h.duration} min</span>
                     </div>
