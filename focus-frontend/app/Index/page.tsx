@@ -4,6 +4,7 @@ import NavBar from "../components/NavBar";
 import { useAuth } from "../hooks/useAuth";
 import { api }     from "../lib/api";
 import { useEffect, useRef, useState } from "react";
+import { SessionDetailModal } from "../components/SessionDetailModal";
 import { useRouter } from "next/navigation";
 
 type FocusSession = {
@@ -38,6 +39,10 @@ export default function Dashboard() {
   const [monthlyMinutes, setMonthlyMinutes] = useState(0);
   const [monthlySessions, setMonthlySessions] = useState(0);
 
+  // Weekly stats
+  const [weeklyMinutes, setWeeklyMinutes] = useState(0);
+  const [weeklySessions, setWeeklySessions] = useState(0);
+
   const [history, setHistory] = useState<FocusSession[]>([]);
   const [filteredHistory, setFilteredHistory] = useState<FocusSession[]>([]);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
@@ -46,6 +51,7 @@ export default function Dashboard() {
 
   const [loading, setLoading] = useState(false);
   const [tag, setTag] = useState("");
+  const [openSessionId, setOpenSessionId] = useState<number | null>(null);
 
   const [stoppedSessionId, setStoppedSessionId] = useState<number | null>(null);
   const [stoppedDuration, setStoppedDuration] = useState(0);
@@ -68,11 +74,12 @@ export default function Dashboard() {
 
   const refreshStats = async (t: string) => {
     try {
-      const [daily, streak, hist, monthly, tags] = await Promise.all([
+      const [daily, streak, hist, monthly, weekly, tags] = await Promise.all([
         api.get<any>("/focus/stats/daily",   t),
         api.get<any>("/focus/stats/streak",  t),
         api.get<any>("/focus/history",       t),
         api.get<any>("/focus/stats/monthly", t),
+        api.get<any>("/focus/stats/weekly",  t),
         api.get<any>("/tags",                t).catch(() => []),
       ]);
       setDailyMinutes(daily.totalMinutes ?? 0);
@@ -87,6 +94,9 @@ export default function Dashboard() {
       setFilteredHistory(histList);
       setMonthlyMinutes(monthly.totalMinutes ?? 0);
       setMonthlySessions(monthly.totalSessions ?? 0);
+
+      setWeeklyMinutes(weekly.totalMinutes ?? 0);
+      setWeeklySessions(weekly.totalSessions ?? 0);
       setAvailableTags(Array.isArray(tags) ? tags : []);
     } catch (e) {
       console.error("Stats error", e);
@@ -266,6 +276,17 @@ export default function Dashboard() {
         .monthly-sessions-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #333; }
         .monthly-arrow { font-size: 12px; color: #2a2a2a; margin-top: 6px; transition: color 0.15s; }
         .monthly-card:hover .monthly-arrow { color: #c9a84c; }
+
+        /* Weekly + Monthly side by side */
+        .summary-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+        .summary-row .monthly-card { margin-bottom: 0; }
+        .weekly-card {
+          background: #111; border: 1px solid #1e1e1e; border-radius: 12px;
+          padding: 18px 20px; display: flex; align-items: center; justify-content: space-between;
+          transition: border-color 0.15s; cursor: pointer;
+        }
+        .weekly-card:hover { border-color: #2a2a2a; }
+        .weekly-card:hover .monthly-arrow { color: #c9a84c; }
         .stat-card { background: #111; border: 1px solid #1e1e1e; border-radius: 12px; padding: 20px 16px; }
         .stat-value { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; color: #f0ede6; margin-bottom: 4px; }
         .stat-name { font-size: 11px; color: #444; letter-spacing: 0.08em; text-transform: uppercase; }
@@ -366,11 +387,26 @@ export default function Dashboard() {
           .dash-main { border-right: none; border-bottom: 1px solid #181818; padding: 32px 24px; }
           .dash-side { padding: 32px 24px; }
           .stats-top { grid-template-columns: repeat(3, 1fr); }
+          .summary-row { grid-template-columns: 1fr; }
         }
       `}</style>
 
       <div className="dash-root">
         <NavBar />
+
+        {/* Session detail modal */}
+        {openSessionId !== null && (
+          <SessionDetailModal
+            sessionId={openSessionId}
+            onClose={() => setOpenSessionId(null)}
+            onNoteUpdated={(id, note) => {
+              const updater = (prev: FocusSession[]) =>
+                prev.map((h) => h.id === id ? { ...h, note } : h);
+              setHistory(updater);
+              setFilteredHistory(updater);
+            }}
+          />
+        )}
 
         <div className="dash-body">
           <main className="dash-main">
@@ -389,16 +425,33 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="monthly-card" onClick={() => router.push("/Stats/trend")} title="View weekly trend">
-              <div className="monthly-left">
-                <span className="monthly-label">{currentMonthName}</span>
-                <span className="monthly-value">{fmtHours(monthlyMinutes)}</span>
-                <span className="monthly-sub">focus this month</span>
+            <div className="summary-row">
+              {/* Weekly card */}
+              <div className="weekly-card" onClick={() => router.push("/Stats/trend")} title="View weekly trend">
+                <div className="monthly-left">
+                  <span className="monthly-label">This week</span>
+                  <span className="monthly-value">{fmtHours(weeklyMinutes)}</span>
+                  <span className="monthly-sub">focus this week</span>
+                </div>
+                <div className="monthly-right">
+                  <span className="monthly-sessions-val">{weeklySessions}</span>
+                  <span className="monthly-sessions-label">sessions</span>
+                  <span className="monthly-arrow">View trend →</span>
+                </div>
               </div>
-              <div className="monthly-right">
-                <span className="monthly-sessions-val">{monthlySessions}</span>
-                <span className="monthly-sessions-label">sessions</span>
-                <span className="monthly-arrow">View trend →</span>
+
+              {/* Monthly card */}
+              <div className="monthly-card" onClick={() => router.push("/Stats/trend")} title="View weekly trend">
+                <div className="monthly-left">
+                  <span className="monthly-label">{currentMonthName}</span>
+                  <span className="monthly-value">{fmtHours(monthlyMinutes)}</span>
+                  <span className="monthly-sub">focus this month</span>
+                </div>
+                <div className="monthly-right">
+                  <span className="monthly-sessions-val">{monthlySessions}</span>
+                  <span className="monthly-sessions-label">sessions</span>
+                  <span className="monthly-arrow">View trend →</span>
+                </div>
               </div>
             </div>
 
@@ -544,7 +597,12 @@ export default function Dashboard() {
               <div className="history-list">
                 {filteredHistory.map((h) => (
                   <div key={h.id} className="history-item">
-                    <div className="history-item-top">
+                    <div
+                      className="history-item-top"
+                      style={{ cursor: "pointer" }}
+                      onClick={() => setOpenSessionId(h.id)}
+                      title="View session details"
+                    >
                       <span className="history-date">{formatDate(h.startTime)}</span>
                       <span className="history-dur">{h.duration} min</span>
                     </div>
